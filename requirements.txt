@@ -1,0 +1,6 @@
+crc==7.1.0
+numpy==2.3.1
+opencv-contrib-python==4.11.0.86
+opencv-python==4.11.0.86
+pyserial==3.5
+simple-pid==2.0.1

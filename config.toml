@@ -1,0 +1,52 @@
+[algorithm]
+processing_scale = 0.5
+
+[algorithm.thresholds.colors]
+blue = [100, 150, 0]
+yellow = [0, 100, 150]
+magenta = [150, 0, 100]
+red = [150, 0, 0]
+
+[algorithm.thresholds.ranges]
+blue = [100, 150, 0]
+yellow = [0, 100, 150]
+magenta = [150, 0, 100]
+red = [150, 0, 0]
+
+[algorithm.denoising]
+
+[hardware]
+enable = true
+port = "/dev/ttyUSB0"
+baudrate = 115200
+update_freq = 25
+legacy_chassis = true
+
+[hardware.limits]
+max_speed = 1.0
+max_turn = 1.0
+max_strafe = 1.0
+
+[hardware.pid.steering]
+Kp = 3.0
+Kd = 0.5
+Ki = 0
+
+[hardware.pid.strafing]
+Kp = 3.0
+Kd = 0.5
+Ki = 0
+
+[hardware.control.speeds]
+min = 0.6
+max = 0.6
+
+[hardware.control.steering]
+max = 0.6
+min = 0.3
+
+[hardware.control.strafing]
+
+[display]
+use_remote = true
+remote_address = "192.168.81.74:0"

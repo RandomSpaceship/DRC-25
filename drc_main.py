@@ -107,54 +107,6 @@ def process_key(key):
         robot_stop = False
 
 
-def render_text(img, text, org, col=(0, 0, 0), border=(255, 255, 255), scale=1):
-    scale = scale * process_scale
-    (x, y) = org
-    org = (int(x * process_scale), int(y * process_scale))
-    cv.putText(
-        img,
-        text,
-        org,
-        cv.FONT_HERSHEY_SIMPLEX,
-        scale,
-        border,
-        math.ceil(3 * scale),
-        cv.LINE_AA,
-    )
-    cv.putText(
-        img,
-        text,
-        org,
-        cv.FONT_HERSHEY_SIMPLEX,
-        scale,
-        col,
-        math.ceil(1 * scale),
-        cv.LINE_AA,
-    )
-
-
-def steering_to_motor_vals(steering, kill):
-    steering = min(max(steering, -1), 1)
-    min_forward = 0.6
-    max_forward = min_forward
-
-    max_steering = 0.6
-
-    min_speed_steering = 0.3
-
-    slow_lerp = min(abs(steering) / min_speed_steering, 1)
-
-    forward_out = ((1 - slow_lerp) * max_forward) + (slow_lerp * min_forward)
-    steering_out = steering * max_steering
-
-    if kill:
-        return (0, 0)
-
-    left = forward_out - steering_out
-    right = forward_out + steering_out
-    return (left, right)
-
-
 def serial_io_loop(
     current_error,
     future_error,
@@ -473,9 +425,7 @@ if __name__ == "__main__":
         raw_horz_derivative = cv.Sobel(
             distance_plot, cv.CV_32F, 2, 0, ksize=derivative_kernel_size
         )
-        horz_d1 = cv.Sobel(
-            distance_plot, cv.CV_32F, 1, 0, ksize=derivative_kernel_size
-        )
+        horz_d1 = cv.Sobel(distance_plot, cv.CV_32F, 1, 0, ksize=derivative_kernel_size)
         raw_vert_derivative = cv.Sobel(
             distance_plot, cv.CV_32F, 0, 2, ksize=derivative_kernel_size
         )
@@ -686,9 +636,7 @@ if __name__ == "__main__":
             case DisplayMode.V_SOBOL:
                 txt = "VSBL"
                 display_frame = cv.cvtColor(
-                    cv.normalize(
-                        horz_d1, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1
-                    ),
+                    cv.normalize(horz_d1, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1),
                     cv.COLOR_GRAY2BGR,
                 )
             case DisplayMode.COMBINED_DERIV:
