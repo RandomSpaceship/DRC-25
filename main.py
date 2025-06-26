@@ -24,7 +24,7 @@ while True:
     if key == ord("-"):
         break
 
-    img = cv.imread("paths3.png")
+    img = cv.imread("paths4.png")
 
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
@@ -63,12 +63,22 @@ while True:
     _, endpoints = cv.threshold(blur, 80, 255, cv.THRESH_BINARY_INV)
     endpoints = cv.bitwise_and(endpoints, skeleton)
     junctions = cv.bitwise_and(junctions, skeleton)
+
     endpoints = cv.dilate(endpoints, kernel, iterations=1)
     junctions = cv.dilate(junctions, kernel, iterations=1)
 
     # with junctions found:
     # - strip them out of the skeletonised image
-    # -
+    # - calculate contours
+    # - draw each contour individually on black frame
+    # - find endpoints
+    # - connect endpoints to nearest 2 junctions
+    stripped_skel = skeleton.copy()
+    stripped_skel[junctions > 0] = 0
+
+    junctions = cv.dilate(junctions, kernel, iterations=1)
+
+    stripped_skel = cv.bitwise_and(junctions, stripped_skel)
 
     (height, width) = skeleton.shape
     pointsMask = np.zeros((height, width, 1), np.uint8)
@@ -76,11 +86,12 @@ while True:
     # 0.15: too low
     # 0.2: endpoints, junctions
     # 0.4: most junctions (shallow ones fail)
-    corners = cv.goodFeaturesToTrack(skeleton, 25, 0.3, 10)
+    corners = cv.goodFeaturesToTrack(skeleton, 25, 0.2, 10)
 
-    disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
-    disp[junctions > 0] = (0, 255, 0)  # junctions
-    disp[endpoints > 0] = (255, 0, 255)  # endpoints
+    disp = cv.cvtColor(stripped_skel, cv.COLOR_GRAY2BGR)
+    # disp[junctions > 0] = (0, 255, 0)  # junctions
+    disp[endpoints > 0] = (255, 0, 0)  # endpoints
+    
     for corner in corners:
         x, y = corner.ravel()
         # cv.circle(disp, (int(x), int(y)), 5, (255, 100, 0), -1)
