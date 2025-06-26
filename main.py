@@ -53,12 +53,18 @@ while True:
     )
     # disp = np.zeros((rows, cols, 3), np.uint8)
     skeleton = cv.ximgproc.thinning(img_gray, thinningType=cv.ximgproc.THINNING_GUOHALL)
-    kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (7, 7))
+    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     kernel = kernel / np.sum(kernel)
     blur = cv.filter2D(skeleton, -1, kernel)
     # averaging blur
     # blur_skel = cv.GaussianBlur(skeleton, (5, 5), 0)
-    _, junctions = cv.threshold(blur, 60, 255, cv.THRESH_BINARY)
+    # _, junctions = cv.threshold(blur, 60, 255, cv.THRESH_BINARY)
+    _, junctions = cv.threshold(blur, 110, 255, cv.THRESH_BINARY)
+    _, endpoints = cv.threshold(blur, 80, 255, cv.THRESH_BINARY_INV)
+    endpoints = cv.bitwise_and(endpoints, skeleton)
+    junctions = cv.bitwise_and(junctions, skeleton)
+    endpoints = cv.dilate(endpoints, kernel, iterations=1)
+    junctions = cv.dilate(junctions, kernel, iterations=1)
 
     # with junctions found:
     # - strip them out of the skeletonised image
@@ -72,7 +78,9 @@ while True:
     # 0.4: most junctions (shallow ones fail)
     corners = cv.goodFeaturesToTrack(skeleton, 25, 0.3, 10)
 
-    disp = cv.cvtColor(junctions, cv.COLOR_GRAY2BGR)
+    disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
+    disp[junctions > 0] = (0, 255, 0)  # junctions
+    disp[endpoints > 0] = (255, 0, 255)  # endpoints
     for corner in corners:
         x, y = corner.ravel()
         # cv.circle(disp, (int(x), int(y)), 5, (255, 100, 0), -1)
