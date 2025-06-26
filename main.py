@@ -1,7 +1,15 @@
+# TERMINOLOGY:
+# - junction: a point where 3 or more lines meet
+# - termination: a point where 1 line ends
+# - node: either a junction or a termination
+# - line: A connection between two nodes
+# - endpoint: A point on either end of a line which needs to be associated with a node
+
 import config
 import cv2 as cv
 import math
 import numpy as np
+from enum import Enum
 
 # import hardware
 
@@ -15,57 +23,65 @@ window_title = "Pathfinder"
 
 img = cv.imread("paths.png")
 rows, cols, channels = img.shape
+rows = rows + 2
+cols = cols + 2
 
 cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
 cv.resizeWindow(window_title, int(cols), int(rows))
 
+draw_junctions = False
+draw_terminations = False
+
+
+class ShownImage(Enum):
+    INPUT = 0
+    SKELETON = 1
+    JUNCTIONS = 2
+    FILTERED_JUNCTIONS = 3
+    TERMINATIONS = 4
+    FILTERED_TERMINATIONS = 5
+
+
+shown_image = ShownImage.INPUT
 while True:
     key = cv.waitKey(1)
     if key == ord("-"):
         break
+    if key == ord("a"):
+        draw_junctions = not draw_junctions
+    if key == ord("s"):
+        draw_terminations = not draw_terminations
+    if key == ord("1"):
+        shown_image = ShownImage.INPUT
+    if key == ord("2"):
+        shown_image = ShownImage.SKELETON
+    if key == ord("3"):
+        shown_image = ShownImage.JUNCTIONS
+    if key == ord("4"):
+        shown_image = ShownImage.FILTERED_JUNCTIONS
+    if key == ord("5"):
+        shown_image = ShownImage.TERMINATIONS
+    if key == ord("6"):
+        shown_image = ShownImage.FILTERED_TERMINATIONS
 
-    img = cv.imread("paths4.png")
+    img = cv.imread("paths.png")
+    # create black border to prevent weird skeletonization artifacts
+    img = cv.copyMakeBorder(img, 1, 1, 1, 1, cv.BORDER_CONSTANT, value=0)
 
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-    # lines = cv.HoughLines(img_gray, 1, np.pi / 180, 150, None, 0, 0)
-    # if lines is not None:
-    #     for i in range(0, len(lines)):
-    #         rho = lines[i][0][0]
-    #         theta = lines[i][0][1]
-    #         a = math.cos(theta)
-    #         b = math.sin(theta)
-    #         x0 = a * rho
-    #         y0 = b * rho
-    #         pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
-    #         pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
-    #         cv.line(img, pt1, pt2, (0, 0, 255), 3, cv.LINE_AA)
-
-    # linesP = cv.HoughLinesP(img_gray, 1, 30 * np.pi / 180, 80, None, 0, int(rows * 0.1))
-    # if linesP is not None:
-    #     for i in range(0, len(linesP)):
-    #         l = linesP[i][0]
-    #         cv.line(img, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv.LINE_AA)
-
-    # find contours
-    contours, heierarchy = cv.findContours(
-        img_gray, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
-    )
-    # disp = np.zeros((rows, cols, 3), np.uint8)
     skeleton = cv.ximgproc.thinning(img_gray, thinningType=cv.ximgproc.THINNING_GUOHALL)
     kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
     kernel = kernel / np.sum(kernel)
     blur = cv.filter2D(skeleton, -1, kernel)
     # averaging blur
-    # blur_skel = cv.GaussianBlur(skeleton, (5, 5), 0)
-    # _, junctions = cv.threshold(blur, 60, 255, cv.THRESH_BINARY)
-    _, junctions = cv.threshold(blur, 110, 255, cv.THRESH_BINARY)
-    _, endpoints = cv.threshold(blur, 80, 255, cv.THRESH_BINARY_INV)
-    endpoints = cv.bitwise_and(endpoints, skeleton)
-    junctions = cv.bitwise_and(junctions, skeleton)
+    _, junctions_raw = cv.threshold(blur, 110, 255, cv.THRESH_BINARY)
+    _, terminations_raw = cv.threshold(blur, 80, 255, cv.THRESH_BINARY_INV)
+    terminations_raw = cv.bitwise_and(terminations_raw, skeleton)
+    junctions_raw = cv.bitwise_and(junctions_raw, skeleton)
 
-    endpoints = cv.dilate(endpoints, kernel, iterations=1)
-    junctions = cv.dilate(junctions, kernel, iterations=1)
+    terminations = cv.dilate(terminations_raw, kernel, iterations=1)
+    junctions = cv.dilate(junctions_raw, kernel, iterations=1)
 
     # with junctions found:
     # - strip them out of the skeletonised image
@@ -75,76 +91,84 @@ while True:
     # - connect endpoints to nearest 2 junctions
     stripped_skel = skeleton.copy()
     stripped_skel[junctions > 0] = 0
+    line_contours, heierarchy = cv.findContours(
+        stripped_skel, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+    )
 
     junctions = cv.dilate(junctions, kernel, iterations=1)
+    terminations = cv.dilate(terminations, kernel, iterations=1)
 
-    stripped_skel = cv.bitwise_and(junctions, stripped_skel)
+    nodes = cv.bitwise_or(junctions, terminations)
 
-    (height, width) = skeleton.shape
-    pointsMask = np.zeros((height, width, 1), np.uint8)
+    endpoints = cv.bitwise_and(stripped_skel, nodes)
+
+    endpoint_coords = np.argwhere(endpoints).astype(np.int32)
+    # print(endpoint_coords)
+
+    junction_contours, _ = cv.findContours(
+        junctions, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+    )
+    termination_contours, _ = cv.findContours(
+        terminations, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+    )
+
+    node_indices = range(len(junction_contours) + len(termination_contours))
+    line_indices = range(len(line_contours))
+    endpoint_indices = range(len(endpoint_coords))
+
+    node_map = {}
+
+    links = {}
+
+    # associate endpoints with junctions
+    for endpoint_idx in endpoint_indices:
+        endpoint = endpoint_coords[endpoint_idx]
+        for node_idx in node_indices:
+            contour = (
+                junction_contours[node_idx]
+                if node_idx < len(junction_contours)
+                else termination_contours[node_idx - len(junction_contours)]
+            )
+            dist = cv.pointPolygonTest(
+                contour, (int(endpoint[1]), int(endpoint[0])), False
+            )
+            if dist < 0:
+                continue
+            if node_idx not in node_map:
+                node_map[node_idx] = []
+            node_map[node_idx].append(endpoint_idx)
+            break
+    print("Node map:", node_map)
 
     # 0.15: too low
     # 0.2: endpoints, junctions
     # 0.4: most junctions (shallow ones fail)
-    corners = cv.goodFeaturesToTrack(skeleton, 25, 0.2, 10)
+    # corners = cv.goodFeaturesToTrack(skeleton, 25, 0.2, 10)
 
-    disp = cv.cvtColor(stripped_skel, cv.COLOR_GRAY2BGR)
-    # disp[junctions > 0] = (0, 255, 0)  # junctions
-    disp[endpoints > 0] = (255, 0, 0)  # endpoints
-    
-    for corner in corners:
-        x, y = corner.ravel()
-        # cv.circle(disp, (int(x), int(y)), 5, (255, 100, 0), -1)
+    disp = None
+    match shown_image:
+        case ShownImage.INPUT:
+            disp = img.copy()
+        case ShownImage.SKELETON:
+            disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
+        case ShownImage.JUNCTIONS:
+            disp = cv.cvtColor(junctions_raw, cv.COLOR_GRAY2BGR)
+        case ShownImage.FILTERED_JUNCTIONS:
+            disp = cv.cvtColor(junctions, cv.COLOR_GRAY2BGR)
+        case ShownImage.TERMINATIONS:
+            disp = cv.cvtColor(terminations_raw, cv.COLOR_GRAY2BGR)
+        case ShownImage.FILTERED_TERMINATIONS:
+            disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
 
-    for contour in contours:
-        # approx = cv.approxPolyDP(contour, 0.05 * cv.arcLength(contour, True), True)
-        # print(f"len {cv.arcLength(contour, True)}")
-        # sides = math.floor(cv.arcLength(contour, True) * 0.05)
-        # if sides > len(contour) / 2:
+    if draw_junctions:
+        disp[junctions > 0] = (0, 255, 0)
+    if draw_terminations:
+        disp[terminations > 0] = (255, 0, 255)  # endpoints
 
-        # convex hull not having enough points?
-        approx = cv.convexHull(contour, returnPoints=True)
-
+    for junction in line_contours:
         # cv.drawContours(disp, [contour], 0, (0, 0, 255), 3)
-        # cv.drawContours(disp, [approx], 0, (0, 255, 0), 3)
-        x, y, w, h = cv.boundingRect(contour)
-        # cv.rectangle(disp, (x, y), (x + w, y + h), (255, 0, 0), 2)
-    # https://stackoverflow.com/questions/72164740/how-to-find-the-junction-points-or-segments-in-a-skeletonized-image-python-openc
-    # blur = cv.GaussianBlur(disp, (3,3), 0)
-    # thresh = cv.threshold(blur, 0, 255, cv.THRESH_BINARY + cv.THRESH_OTSU)[1]
-
-    # # Find horizonal lines
-    # horizontal_kernel = cv.getStructuringElement(cv.MORPH_RECT, (5,1))
-    # horizontal = cv.morphologyEx(thresh, cv.MORPH_OPEN, horizontal_kernel, iterations=1)
-
-    # # Find vertical lines
-    # vertical_kernel = cv.getStructuringElement(cv.MORPH_RECT, (1,5))
-    # vertical = cv.morphologyEx(thresh, cv.MORPH_OPEN, vertical_kernel, iterations=1)
-
-    # # Find joint intersections then the centroid of each joint
-    # joints = cv.bitwise_and(horizontal, vertical)
-    # cnts = cv.findContours(joints, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    # cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-    # for c in cnts:
-    #     # Find centroid and draw center point
-    #     x,y,w,h = cv.boundingRect(c)
-    #     centroid, coord, area = cv.minAreaRect(c)
-    #     cx, cy = int(centroid[0]), int(centroid[1])
-    #     cv.circle(disp, (cx, cy), 5, (36,255,12), -1)
-
-    # # Find endpoints
-    # corners = cv.goodFeaturesToTrack(thresh, 5, 0.5, 10)
-    # corners = np.int0(corners)
-    # for corner in corners:
-    #     x, y = corner.ravel()
-    #     cv.circle(disp, (x, y), 5, (255,100,0), -1)
-
-    # cv.imshow('thresh', thresh)
-    # cv.imshow('joints', joints)
-    # cv.imshow('horizontal', horizontal)
-    # cv.imshow('vertical', vertical)
-    # cv.imshow('image', disp)
-    # cv.waitKey()
+        x, y, w, h = cv.boundingRect(junction)
+        # cv.rectangle(disp, (x, y), (x + w, y + h), (255, 255, 0), 2)
 
     cv.imshow(window_title, disp)
 cv.destroyAllWindows()
