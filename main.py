@@ -71,7 +71,7 @@ while True:
     if key == ord("9"):
         shown_image = ShownImage.ENDPOINTS
 
-    img = cv.imread("paths2.png")
+    img = cv.imread("paths6.png")
 
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
@@ -98,13 +98,21 @@ while True:
     # - draw each contour individually on black frame
     # - find endpoints
     # - connect endpoints to nearest 2 junctions
+    # TODO: Investigate contour (line, junction) intersection tests
+
     stripped_skel = skeleton.copy()
     stripped_skel[junctions_raw > 0] = 0
+
+    junctions = cv.dilate(junctions_raw, kernel, iterations=1)
+
+    terminations[junctions > 0] = 0
+    extra_stripped_skel = cv.bitwise_and(stripped_skel, cv.bitwise_not(junctions))
+    extra_stripped_skel = cv.dilate(extra_stripped_skel, kernel, iterations=1)
+    stripped_skel = cv.bitwise_and(stripped_skel, extra_stripped_skel)
+
     line_contours, _ = cv.findContours(
         stripped_skel, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
     )
-
-    junctions = cv.dilate(junctions_raw, kernel, iterations=1)
 
     junction_endpoints = cv.bitwise_and(stripped_skel, junctions)
 
@@ -218,10 +226,15 @@ while True:
                     print("Error: No junction found for endpoint", current_node_idx)
                     continue
                 junction_idx, other_nodes = junction_data
+                tree[junction_idx] = []
+                # if junction_idx in tree and prev_idx in tree[junction_idx]:
+                #     tree[junction_idx].remove((prev_idx, line_idx))
+
                 tree[prev_idx].append((junction_idx, line_idx))
                 leaf_indices.extend([(junction_idx, idx) for idx in other_nodes])
             else:
                 # this is a termination
+                tree[other_endpoint_idx] = []
                 tree[prev_idx].append((other_endpoint_idx, line_idx))
 
     # 0.15: too low
