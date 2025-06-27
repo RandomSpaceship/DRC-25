@@ -53,7 +53,7 @@ class EGB320HardwareAPI:
         left = int(left * 10)
         right = int(right * 10)
         can_grip = (time.monotonic() - self.last_gripper_time) > self.kill_time
-        gripper_pos = self.gripper_pos.value if can_grip else 255
+        gripper_pos = self.gripper_pos if can_grip else 255
         raw_data = struct.pack(
             "<BBhhHB",
             0xAA,

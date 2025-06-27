@@ -176,6 +176,8 @@ def find_paths(mask):
     def find_line(endpoint_idx):
         """Find the line index for a given endpoint index."""
         for line_idx, endpoints in enumerate(line_endpoints):
+            if len(endpoints) != 2:
+                return None
             if endpoint_idx in endpoints:
                 if endpoints[0] == endpoint_idx:
                     return (line_idx, endpoints[1])
@@ -191,6 +193,8 @@ def find_paths(mask):
         tree[root_idx] = []
         leaf_indices = []
         if root_idx < junction_endpoint_count:
+            if root_idx not in junction_endpoint_map:
+                continue
             leaf_indices = [(root_idx, idx) for idx in junction_endpoint_map[root_idx]]
         else:
             leaf_indices = [(root_idx, root_idx)]
@@ -199,7 +203,7 @@ def find_paths(mask):
 
             line_data = find_line(current_node_idx)
             if line_data is None:
-                print("Error: No line found for endpoint", current_node_idx)
+                # print("Error: No line found for endpoint", current_node_idx)
                 continue
             line_idx, other_endpoint_idx = line_data
 
@@ -207,7 +211,7 @@ def find_paths(mask):
             if other_endpoint_idx < junction_endpoint_count:
                 junction_idx = endpoint_junction_map[other_endpoint_idx]
                 if junction_idx is None:
-                    print("Error: No junction found for endpoint", current_node_idx)
+                    # print("Error: No junction found for endpoint", current_node_idx)
                     continue
                 other_nodes = junction_endpoint_map[junction_idx]
                 if other_endpoint_idx in other_nodes:

@@ -33,6 +33,7 @@ def mouse_event(event, x, y, flags, param):
 
 
 cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
+cv.resizeWindow(window_title, 640, 480)
 cv.setMouseCallback(window_title, mouse_event)
 
 draw_junctions = False
@@ -63,6 +64,16 @@ cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
 if not cap.isOpened():
     print("Cannot open camera")
     exit()
+
+prev_offsets = np.zeros(7)
+
+import hardware
+
+hw = hardware.EGB320HardwareAPI(
+    port=config.values["hardware"]["port"],
+    baudrate=config.values["hardware"]["baudrate"],
+)
+# hw.open()
 
 shown_image = ShownImage.INPUT
 while True:
@@ -117,7 +128,7 @@ while True:
 
     mouse_img_x = min(max(mouse_x, 0), cols - 1)
     mouse_img_y = min(max(mouse_y, 0), rows - 1)
-    print(f"HSV: {img_hsv[mouse_img_y, mouse_img_x]}")
+    # print(f"HSV: {img_hsv[mouse_img_y, mouse_img_x]}")
 
     blue_threshold = np.array(
         config.values["algorithm"]["thresholds"]["colors"]["blue"]
@@ -147,15 +158,23 @@ while True:
     combined_mask = cv.morphologyEx(
         combined_raw_mask, cv.MORPH_OPEN, color_denoise_kernel
     )
-    combined_mask[rows - 1 - config.values["algorithm"]["sidebar_height"] :, 0] = 255
+    combined_mask[rows - 1 - config.values["algorithm"]["sidebar_height"] :, 0:10] = 255
     combined_mask[
-        rows - 1 - config.values["algorithm"]["sidebar_height"] :, cols - 1
+        rows - 1 - config.values["algorithm"]["sidebar_height"] :,
+        cols - 1 - 10 : cols - 1,
     ] = 255
+
+    fillet_kernel_r = 5
+    fillet_kernel = cv.getStructuringElement(
+        cv.MORPH_ELLIPSE,
+        ((fillet_kernel_r * 2) - 1, (fillet_kernel_r * 2) - 1),
+    )
+    combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, fillet_kernel)
 
     voronoi = cv.distanceTransform(cv.bitwise_not(combined_mask), cv.DIST_L2, 5)
 
     derivative_kernel_size = 21
-    laplacian = cv.normalize(
+    laplacian = 255 - cv.normalize(
         cv.Laplacian(voronoi, cv.CV_32F, ksize=derivative_kernel_size),
         None,
         0,
@@ -164,21 +183,85 @@ while True:
         cv.CV_8UC1,
     )
 
+    voronoi = cv.normalize(
+        voronoi,
+        None,
+        0,
+        255,
+        cv.NORM_MINMAX,
+        cv.CV_8UC1,
+    )
+
+    # _, voronoi = cv.threshold(voronoi, 50, 255, cv.THRESH_BINARY)
+
     # path_mask = cv.adaptiveThreshold(
     #     laplacian, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
-    _, path_mask = cv.threshold(laplacian, 100, 255, cv.THRESH_BINARY_INV)
+    _, path_mask = cv.threshold(laplacian, 170, 255, cv.THRESH_BINARY)
+    path_mask[0 : config.values["algorithm"]["blackbar_height"], :] = 0
+    path_denoise_kernel = cv.getStructuringElement(
+        cv.MORPH_RECT,
+        (3, 3),
+    )
+    # path_mask = cv.morphologyEx(path_mask, cv.MORPH_OPEN, path_denoise_kernel)
 
-    # input_mask = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-
-    # path_data = pathfinder.find_paths(input_mask)
-    # tree = path_data["tree"]
-    # tree_roots = path_data["roots"]
-    # junction_coords = path_data["junctions"]
-    # junction_endpoint_count = path_data["junction_endpoint_count"]
-    # termination_coords = path_data["terminations"]
-    # line_lengths = path_data["line_lengths"]
-    # pathfinding_time = path_data["proc_time"]
+    path_data = pathfinder.find_paths(path_mask)
+    tree = path_data["tree"]
+    tree_roots = path_data["roots"]
+    junction_coords = path_data["junctions"]
+    junction_endpoint_count = path_data["junction_endpoint_count"]
+    termination_coords = path_data["terminations"]
+    line_lengths = path_data["line_lengths"]
+    pathfinding_time = path_data["proc_time"]
     # print(f"Pathfinding took {pathfinding_time:.3f} seconds")
+
+    def get_tree_len(node):
+        if node >= junction_endpoint_count:
+            return 0
+        accumulator = 0
+        for next_node, line in tree[node]:
+            accumulator += line_lengths[line]
+            accumulator += get_tree_len(next_node)
+        return accumulator
+
+    tree_lens = [int(get_tree_len(x)) for x in tree_roots]
+    chosen_root = tree_lens.index(max(tree_lens)) if tree_lens else -1
+    if chosen_root >= 0:
+        tree_roots = [chosen_root]
+
+    def get_best_node(node_idx, best_idx, current_coords):
+        is_junction = node_idx < junction_endpoint_count
+        x, y = (
+            junction_coords[node_idx]
+            if is_junction
+            else termination_coords[node_idx - junction_endpoint_count]
+        )
+        best_coords = current_coords
+        if y < (rows - 20) and y < current_coords[1]:
+            best_coords = (x, y)
+            best_idx = node_idx
+        if is_junction:
+            for next_node, line in tree[node_idx]:
+                (best_idx, best_coords) = get_best_node(
+                    next_node, best_idx, best_coords
+                )
+
+        # print(best_coords)
+        return (best_idx, best_coords)
+
+    best_idx = 0
+    best_coords = (1000, 1000)
+    if chosen_root >= 0:
+        best_idx, best_coords = get_best_node(chosen_root, -1, (1000, 1000))
+        # print(best_coords)
+        if best_idx >= 0:
+            h_error = best_coords[0] - cols / 2
+            h_error /= cols / 2
+            # print(h_error)
+            prev_offsets = np.roll(prev_offsets, 1)
+            prev_offsets[0] = h_error
+            final_err = np.mean(prev_offsets)
+            print(final_err)
+            hw.update(20, -50 * final_err)
 
     disp = img.copy()
     match shown_image:
@@ -233,47 +316,49 @@ while True:
         case ShownImage.PATH_MASK:
             disp = cv.cvtColor(path_mask, cv.COLOR_GRAY2BGR)
 
-    # if draw_junctions:
-    #     # draw the node tree
-    #     for root_idx in tree_roots:
-    #         to_draw = [root_idx]
-    #         while to_draw:
-    #             current_idx = to_draw.pop(0)
-    #             if current_idx in tree:
-    #                 children = tree[current_idx]
-    #                 to_draw.extend([child[0] for child in children])
-    #             if current_idx >= 0 and current_idx in tree:
-    #                 current_pos = (
-    #                     junction_coords[current_idx]
-    #                     if current_idx < len(junction_coords)
-    #                     else termination_coords[current_idx - junction_endpoint_count]
-    #                 )
-    #                 for child_idx, line_idx in tree[current_idx]:
-    #                     child_pos = (
-    #                         junction_coords[child_idx]
-    #                         if child_idx < len(junction_coords)
-    #                         else termination_coords[child_idx - junction_endpoint_count]
-    #                     )
-    #                     cv.arrowedLine(
-    #                         disp,
-    #                         current_pos,
-    #                         child_pos,
-    #                         (255, 255, 0),
-    #                         1,
-    #                     )
-    #                     if draw_terminations:
-    #                         cv.putText(
-    #                             disp,
-    #                             str(line_lengths[line_idx]),
-    #                             (
-    #                                 (current_pos[0] + child_pos[0]) // 2,
-    #                                 (current_pos[1] + child_pos[1]) // 2,
-    #                             ),
-    #                             cv.FONT_HERSHEY_SIMPLEX,
-    #                             0.5,
-    #                             (255, 0, 255),
-    #                         )
+    if draw_junctions:
+        # draw the node tree
+        for root_idx in tree_roots:
+            to_draw = [root_idx]
+            while to_draw:
+                current_idx = to_draw.pop(0)
+                if current_idx in tree:
+                    children = tree[current_idx]
+                    to_draw.extend([child[0] for child in children])
+                if current_idx >= 0 and current_idx in tree:
+                    current_pos = (
+                        junction_coords[current_idx]
+                        if current_idx < len(junction_coords)
+                        else termination_coords[current_idx - junction_endpoint_count]
+                    )
+                    for child_idx, line_idx in tree[current_idx]:
+                        child_pos = (
+                            junction_coords[child_idx]
+                            if child_idx < len(junction_coords)
+                            else termination_coords[child_idx - junction_endpoint_count]
+                        )
+                        cv.arrowedLine(
+                            disp,
+                            current_pos,
+                            child_pos,
+                            (255, 255, 0),
+                            1,
+                        )
+                        if draw_terminations:
+                            cv.putText(
+                                disp,
+                                str(line_lengths[line_idx]),
+                                (
+                                    (current_pos[0] + child_pos[0]) // 2,
+                                    (current_pos[1] + child_pos[1]) // 2,
+                                ),
+                                cv.FONT_HERSHEY_SIMPLEX,
+                                0.5,
+                                (255, 0, 255),
+                            )
 
+    if chosen_root >= 0:
+        cv.arrowedLine(disp, junction_coords[chosen_root], best_coords, (0, 255, 0), 1)
     # if draw_junctions:
     #     disp[expanded_junctions > 0] = (0, 255, 0)
     # if draw_terminations:
