@@ -40,8 +40,10 @@ class ShownImage(Enum):
     FILTERED_TERMINATIONS = 5
     BLUR = 6
     SKELETON_MINUS_JUNCTIONS = 7
-    ENDPOINTS = 8
 
+
+local_region_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
+averaging_kernel = local_region_kernel / np.sum(local_region_kernel)
 
 shown_image = ShownImage.INPUT
 while True:
@@ -68,74 +70,103 @@ while True:
         shown_image = ShownImage.BLUR
     if key == ord("8"):
         shown_image = ShownImage.SKELETON_MINUS_JUNCTIONS
-    if key == ord("9"):
-        shown_image = ShownImage.ENDPOINTS
 
-    img = cv.imread("paths6.png")
+    img = cv.imread("paths7.png")
 
-    img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    input_mask = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-    skeleton = cv.ximgproc.thinning(img_gray, thinningType=cv.ximgproc.THINNING_GUOHALL)
-    kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
-    kernel = kernel / np.sum(kernel)
-    # averaging blur
-    blur = cv.filter2D(skeleton, -1, kernel)
-    junction_thresh = int(255 * 3.5 / 9)
-    termination_thresh = int(255 * 2.5 / 9)
-    _, junctions_raw = cv.threshold(blur, junction_thresh, 255, cv.THRESH_BINARY)
-    _, terminations_raw = cv.threshold(
-        blur, termination_thresh, 255, cv.THRESH_BINARY_INV
+    start_tick = cv.getTickCount()
+
+    skeleton = cv.ximgproc.thinning(
+        input_mask, thinningType=cv.ximgproc.THINNING_GUOHALL
     )
-    terminations_raw = cv.bitwise_and(terminations_raw, skeleton)
-    junctions_raw = cv.bitwise_and(junctions_raw, skeleton)
+    # averaging blur (used to count local pixels)
+    averaged_mask = cv.filter2D(skeleton, -1, averaging_kernel)
+    # All junctions are guaranteed to have > 3 pixels in the 8-neighborhood,
+    # and as such all junctions are guaranteed to have at least 4 pixels in the 3x3 neighborhood.
+    # For certain line geometries, this may have false positives, but this isn't really a problem
+    junction_threshold = int(255 * 3.5 / 9)
+    _, junctions = cv.threshold(
+        averaged_mask, junction_threshold, 255, cv.THRESH_BINARY
+    )
+    # terminations are guaranteed to only have 1 pixel in the 8-neighborhood,
+    # and therefore 2 pixels in the 3x3 neighborhood.
+    termination_threshold = int(255 * 2.5 / 9)
+    _, terminations = cv.threshold(
+        averaged_mask, termination_threshold, 255, cv.THRESH_BINARY_INV
+    )
+    # However, this check also catches the blurred edges of the lines
+    # along with the black section of the mask, so only pixels that were originally part of the skeleton
+    # will be valid. This method will guarantee single-pixel terminations,
+    # although they may overlap with junctions in some cases (which will need to be removed).
+    # Each termination is guaranteed to be a line endpoint
+    terminations = cv.bitwise_and(terminations, skeleton)
 
-    # terminations we can guarantee are single pixels only, junctions can be larger with specific geometry
-    terminations = terminations_raw
+    # split_skeleton is the skeleton with junctions removed.
+    # This splits the skeleton into individual lines.
+    split_skeleton = skeleton.copy()
+    split_skeleton[junctions > 0] = 0
 
-    # with junctions found:
-    # - strip them out of the skeletonised image
-    # - calculate contours
-    # - draw each contour individually on black frame
-    # - find endpoints
-    # - connect endpoints to nearest 2 junctions
+    # expanding the junctions with the 8-neighborhood ensures that
+    # the junctions will overlap with lines by exactly one pixel
+    expanded_junctions = cv.dilate(junctions, local_region_kernel, iterations=1)
+
+    # we also need to remove line segments that fully overlap with the expanded junctions,
+    # as they will not be linked correctly.
+    # To do so, we strip out the expanded junctions
+    # (which should only take one pixel from the end of a line segment)...
+    expanded_split_skeleton = cv.bitwise_and(
+        split_skeleton, cv.bitwise_not(expanded_junctions)
+    )
+    # ... dilate the split skeleton (thus restoring the removed pixel), ...
+    expanded_split_skeleton = cv.dilate(
+        expanded_split_skeleton, local_region_kernel, iterations=1
+    )
+    # ... and then binary-AND it with the original split skeleton to ensure
+    # that the skeleton is still 1 pixel wide.
+    split_skeleton = cv.bitwise_and(split_skeleton, expanded_split_skeleton)
+    # This will keep any lines which are not fully covered by junctions,
+    # as the removed pixels will just be restored by the dilation, but will remove any lines
+    # which are fully covered by junctions as *all* pixels will be removed in the original stripping.
+
     # TODO: Investigate contour (line, junction) intersection tests
-
-    stripped_skel = skeleton.copy()
-    stripped_skel[junctions_raw > 0] = 0
-
-    junctions = cv.dilate(junctions_raw, kernel, iterations=1)
-
-    terminations[junctions > 0] = 0
-    extra_stripped_skel = cv.bitwise_and(stripped_skel, cv.bitwise_not(junctions))
-    extra_stripped_skel = cv.dilate(extra_stripped_skel, kernel, iterations=1)
-    stripped_skel = cv.bitwise_and(stripped_skel, extra_stripped_skel)
-
     line_contours, _ = cv.findContours(
-        stripped_skel, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+        split_skeleton, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
     )
-
-    junction_endpoints = cv.bitwise_and(stripped_skel, junctions)
-
-    junction_endpoint_coords = np.argwhere(junction_endpoints)
-    termination_coords = np.argwhere(terminations)
-    endpoint_coords = np.concatenate(
-        (junction_endpoint_coords, termination_coords), axis=0
-    )
+    line_count = len(line_contours)
 
     junction_contours, _ = cv.findContours(
-        junctions, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
+        expanded_junctions, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE
     )
+    junction_count = len(junction_contours)
 
+    # remove terminations overlapping with junctions as they're invalid
+    terminations[expanded_junctions > 0] = 0
+
+    junction_endpoints = cv.bitwise_and(split_skeleton, expanded_junctions)
+    # find the coordinates of all line endpoints (terminations and junctions)
+    junction_endpoint_coords = np.argwhere(junction_endpoints)
+    termination_coords = np.argwhere(terminations)
+    endpoint_coords = np.vstack((junction_endpoint_coords, termination_coords))
+
+    # we're gonna use these a lot...
     junction_endpoint_count = len(junction_endpoint_coords)
     termination_count = len(termination_coords)
     endpoint_count = junction_endpoint_count + termination_count
-
-    junction_count = len(junction_contours)
     node_count = junction_count + termination_count
 
-    line_count = len(line_contours)
+    # INDEXING EXPLANATION:
+    # Nodes are indexed from 0 to node_count - 1,
+    # where 0 to junction_count - 1 are junctions,
+    # and junction_count to node_count - 1 are terminations.
+    # Endpoints are indexed from 0 to endpoint_count - 1,
+    # where 0 to junction_endpoint_count - 1 are junction endpoints,
+    # and junction_endpoint_count to endpoint_count - 1 are terminations.
+    # Any "node index" is the former, and any "endpoint index" is the latter.
 
+    # list of endpoints for each junction
     junction_endpoints = [[] for _ in range(junction_count)]
+    # list of endpoints for each line
     line_endpoints = [[] for _ in range(line_count)]
 
     # associate junction endpoints with their junction
@@ -145,20 +176,32 @@ while True:
                 contour, (int(endpoint[1]), int(endpoint[0])), False
             )
             if dist < 0:
+                # not inside junction contour, skip
                 continue
             junction_endpoints[junction_idx].append(endpoint_idx)
             break
 
+    # keep a list of remaining endpoints to associate with lines
+    # this allows us to skip already-associated endpoints
+    line_endpoint_indices_remaining = list(range(endpoint_count))
     # associate endpoints with their lines
     for line_idx, contour in enumerate(line_contours):
-        for endpoint_idx, endpoint in enumerate(
-            np.vstack((junction_endpoint_coords, termination_coords))
-        ):
+        endpoint_count = 0
+        for endpoint_idx in line_endpoint_indices_remaining:
+            endpoint = endpoint_coords[endpoint_idx]
             dist = cv.pointPolygonTest(
                 contour, (int(endpoint[1]), int(endpoint[0])), False
             )
             if dist >= 0:
                 line_endpoints[line_idx].append(endpoint_idx)
+                endpoint_count += 1
+            if endpoint_count == 2:
+                # both endpoints found, no need to check further
+                break
+
+        # remove associated endpoint from the list of those remaining
+        for endpoint_idx in line_endpoints[line_idx]:
+            line_endpoint_indices_remaining.remove(endpoint_idx)
 
     def get_contour_center(contour):
         """Calculate the center of a contour."""
@@ -170,10 +213,15 @@ while True:
         return (cx, cy)
 
     junction_coords = [get_contour_center(contour) for contour in junction_contours]
+    # arc length = total perimeter, so therefore length will be half of that since the widths at the end are 1 pixel
+    # and as such don't contribute (significantly)
     line_lengths = [cv.arcLength(contour, True) // 2 for contour in line_contours]
 
+    # the root nodes of the node tree
     tree_roots = []
-    # search for junction roots first, to ensure that loops will get overriden from terminator roots
+    # any node close to the bottom of the image is a root node
+
+    # search for junction roots first, to ensure that potential loops will get overriden from terminator roots
     for current_idx, (x, y) in enumerate(junction_coords):
         if y >= rows - 5:
             tree_roots.append(current_idx)
@@ -201,6 +249,9 @@ while True:
                     return (line_idx, endpoints[0])
         return None
 
+    # Construct the node tree, starting from the root nodes.
+    # This uses the links (lines) between nodes, and the junction data to build a directed
+    # (hopefully acyclic!) graph where each node can have multiple child nodes.
     tree = {}
     for tree_idx, root_idx in enumerate(tree_roots):
         leaf_indices = []
@@ -226,21 +277,16 @@ while True:
                     print("Error: No junction found for endpoint", current_node_idx)
                     continue
                 junction_idx, other_nodes = junction_data
-                tree[junction_idx] = []
+                tree[junction_idx] = []  # no loops allowed!
                 # if junction_idx in tree and prev_idx in tree[junction_idx]:
                 #     tree[junction_idx].remove((prev_idx, line_idx))
 
                 tree[prev_idx].append((junction_idx, line_idx))
                 leaf_indices.extend([(junction_idx, idx) for idx in other_nodes])
+            # otherwise, it's a termination
             else:
-                # this is a termination
-                tree[other_endpoint_idx] = []
+                tree[other_endpoint_idx] = []  # ensure that there are no loops
                 tree[prev_idx].append((other_endpoint_idx, line_idx))
-
-    # 0.15: too low
-    # 0.2: endpoints, junctions
-    # 0.4: most junctions (shallow ones fail)
-    # corners = cv.goodFeaturesToTrack(skeleton, 25, 0.2, 10)
 
     disp = None
     match shown_image:
@@ -249,21 +295,20 @@ while True:
         case ShownImage.SKELETON:
             disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
         case ShownImage.JUNCTIONS:
-            disp = cv.cvtColor(junctions_raw, cv.COLOR_GRAY2BGR)
-        case ShownImage.FILTERED_JUNCTIONS:
             disp = cv.cvtColor(junctions, cv.COLOR_GRAY2BGR)
+        case ShownImage.FILTERED_JUNCTIONS:
+            disp = cv.cvtColor(expanded_junctions, cv.COLOR_GRAY2BGR)
         case ShownImage.TERMINATIONS:
-            disp = cv.cvtColor(terminations_raw, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
         case ShownImage.FILTERED_TERMINATIONS:
             disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
         case ShownImage.BLUR:
-            disp = cv.cvtColor(blur, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(averaged_mask, cv.COLOR_GRAY2BGR)
         case ShownImage.SKELETON_MINUS_JUNCTIONS:
-            disp = cv.cvtColor(stripped_skel, cv.COLOR_GRAY2BGR)
-        case ShownImage.ENDPOINTS:
-            disp = cv.cvtColor(junction_endpoints, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(split_skeleton, cv.COLOR_GRAY2BGR)
 
     if draw_junctions:
+        # draw the node tree
         to_draw = tree_roots.copy()
         while to_draw:
             current_idx = to_draw.pop(0)
@@ -309,9 +354,12 @@ while True:
                         )
 
     if draw_junctions:
-        disp[junctions > 0] = (0, 255, 0)
+        disp[expanded_junctions > 0] = (0, 255, 0)
     if draw_terminations:
         disp[terminations > 0] = (255, 0, 255)  # endpoints
+    end_tick = cv.getTickCount()
+    dt = (end_tick - start_tick) / cv.getTickFrequency()
+    print(dt)
 
     cv.imshow(window_title, disp)
 cv.destroyAllWindows()
