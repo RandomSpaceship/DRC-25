@@ -1,16 +1,17 @@
 [algorithm]
 processing_scale = 0.5
 path_root_y_threshold = 5
+sidebar_height = 50
 
 [algorithm.thresholds.colors]
-blue = [100, 150, 0]
-yellow = [0, 100, 150]
+blue = [105, 240, 250]
+yellow = [30, 66, 250]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.thresholds.ranges]
-blue = [100, 150, 0]
-yellow = [0, 100, 150]
+blue = [50, 50, 50]
+yellow = [50, 50, 50]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
