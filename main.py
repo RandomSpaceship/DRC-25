@@ -23,8 +23,6 @@ window_title = "Pathfinder"
 
 img = cv.imread("paths.png")
 rows, cols, channels = img.shape
-rows = rows + 2
-cols = cols + 2
 
 cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
 cv.resizeWindow(window_title, int(cols), int(rows))
@@ -74,8 +72,6 @@ while True:
         shown_image = ShownImage.ENDPOINTS
 
     img = cv.imread("paths2.png")
-    # create black border to prevent weird skeletonization artifacts
-    img = cv.copyMakeBorder(img, 1, 1, 1, 1, cv.BORDER_CONSTANT, value=0)
 
     img_gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
@@ -156,11 +152,6 @@ while True:
             if dist >= 0:
                 line_endpoints[line_idx].append(endpoint_idx)
 
-    tree_roots = []
-    for current_idx, (y, x) in enumerate(termination_coords):
-        if y >= rows - 2:
-            tree_roots.append(current_idx + junction_endpoint_count)
-
     def get_contour_center(contour):
         """Calculate the center of a contour."""
         M = cv.moments(contour)
@@ -172,6 +163,16 @@ while True:
 
     junction_coords = [get_contour_center(contour) for contour in junction_contours]
     line_lengths = [cv.arcLength(contour, True) // 2 for contour in line_contours]
+
+    tree_roots = []
+    # search for junction roots first, to ensure that loops will get overriden from terminator roots
+    for current_idx, (x, y) in enumerate(junction_coords):
+        if y >= rows - 5:
+            tree_roots.append(current_idx)
+
+    for current_idx, (y, x) in enumerate(termination_coords):
+        if y >= rows - 5:
+            tree_roots.append(current_idx + junction_endpoint_count)
 
     def find_junction(endpoint_idx):
         """Find the junction index for a given endpoint index."""
@@ -194,7 +195,11 @@ while True:
 
     tree = {}
     for tree_idx, root_idx in enumerate(tree_roots):
-        leaf_indices = [(root_idx, root_idx)]
+        leaf_indices = []
+        if root_idx < junction_endpoint_count:
+            leaf_indices = [(root_idx, idx) for idx in junction_endpoints[root_idx]]
+        else:
+            leaf_indices = [(root_idx, root_idx)]
         while leaf_indices:
             (prev_idx, current_node_idx) = leaf_indices.pop(0)
             if prev_idx not in tree:
@@ -245,47 +250,50 @@ while True:
         case ShownImage.ENDPOINTS:
             disp = cv.cvtColor(junction_endpoints, cv.COLOR_GRAY2BGR)
 
-    to_draw = tree_roots.copy()
-    while to_draw:
-        current_idx = to_draw.pop(0)
-        if current_idx in tree:
-            to_draw.extend(tree[current_idx][0])
-        if current_idx >= 0 and current_idx in tree:
-            current_pos = (
-                junction_coords[current_idx]
-                if current_idx < len(junction_coords)
-                else (
-                    termination_coords[current_idx - junction_endpoint_count][1],
-                    termination_coords[current_idx - junction_endpoint_count][0],
-                )
-            )
-            for child_idx, line_idx in tree[current_idx]:
-                child_pos = (
-                    junction_coords[child_idx]
-                    if child_idx < len(junction_coords)
+    if draw_junctions:
+        to_draw = tree_roots.copy()
+        while to_draw:
+            current_idx = to_draw.pop(0)
+            if current_idx in tree:
+                children = tree[current_idx]
+                to_draw.extend([child[0] for child in children])
+            if current_idx >= 0 and current_idx in tree:
+                current_pos = (
+                    junction_coords[current_idx]
+                    if current_idx < len(junction_coords)
                     else (
-                        termination_coords[child_idx - junction_endpoint_count][1],
-                        termination_coords[child_idx - junction_endpoint_count][0],
+                        termination_coords[current_idx - junction_endpoint_count][1],
+                        termination_coords[current_idx - junction_endpoint_count][0],
                     )
                 )
-                cv.arrowedLine(
-                    disp,
-                    current_pos,
-                    child_pos,
-                    (255, 255, 0),
-                    1,
-                )
-                cv.putText(
-                    disp,
-                    str(line_lengths[line_idx]),
-                    (
-                        (current_pos[0] + child_pos[0]) // 2,
-                        (current_pos[1] + child_pos[1]) // 2,
-                    ),
-                    cv.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 0, 255),
-                )
+                for child_idx, line_idx in tree[current_idx]:
+                    child_pos = (
+                        junction_coords[child_idx]
+                        if child_idx < len(junction_coords)
+                        else (
+                            termination_coords[child_idx - junction_endpoint_count][1],
+                            termination_coords[child_idx - junction_endpoint_count][0],
+                        )
+                    )
+                    cv.arrowedLine(
+                        disp,
+                        current_pos,
+                        child_pos,
+                        (255, 255, 0),
+                        1,
+                    )
+                    if draw_terminations:
+                        cv.putText(
+                            disp,
+                            str(line_lengths[line_idx]),
+                            (
+                                (current_pos[0] + child_pos[0]) // 2,
+                                (current_pos[1] + child_pos[1]) // 2,
+                            ),
+                            cv.FONT_HERSHEY_SIMPLEX,
+                            0.5,
+                            (255, 0, 255),
+                        )
 
     if draw_junctions:
         disp[junctions > 0] = (0, 255, 0)
