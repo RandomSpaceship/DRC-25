@@ -2,4 +2,6 @@
 processing_scale = 1.0
 
 [hardware]
-enable = false
+enable = true
+port = "COM12"
+camera_id = 1

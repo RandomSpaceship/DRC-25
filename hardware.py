@@ -42,8 +42,8 @@ class EGB320HardwareAPI:
         self.clicks_per_deg = clicks_per_turn / 720
 
         self.lift_time = self.GripperLiftTimes.LEVEL_1.value
-        self.gripper_pos = self.GripperPositions.OPEN
-        self.led_state = self.LED_RED
+        self.gripper_pos = self.GripperPositions.OPEN.value
+        self.led_state = LedColors.RED.value
         self.last_gripper_time = time.monotonic()
         self.is_open = False
 
@@ -52,7 +52,7 @@ class EGB320HardwareAPI:
             return
         left = int(left * 10)
         right = int(right * 10)
-        can_grip = time.monotonic() - self.last_gripper_time
+        can_grip = (time.monotonic() - self.last_gripper_time) > self.kill_time
         gripper_pos = self.gripper_pos.value if can_grip else 255
         raw_data = struct.pack(
             "<BBhhHB",

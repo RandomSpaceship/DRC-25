@@ -1,5 +1,6 @@
 [algorithm]
 processing_scale = 0.5
+path_root_y_threshold = 5
 
 [algorithm.thresholds.colors]
 blue = [100, 150, 0]
@@ -21,6 +22,7 @@ port = "/dev/ttyUSB0"
 baudrate = 115200
 update_freq = 25
 legacy_chassis = true
+camera_id = 0
 
 [hardware.limits]
 max_speed = 1.0

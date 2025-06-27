@@ -7,21 +7,80 @@
 
 import config
 import cv2 as cv
+import math
+import networkx as nx
 import numpy as np
+from enum import Enum
+
+# import hardware
+
+print("\r\n\r\nDRC Main Launch File")
+
+print(config.values)
+
+# hardware_api = hardware.HardwareAPI()
+
+window_title = "Pathfinder"
+
+img = cv.imread("path.png")
+rows, cols, channels = img.shape
+
+cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
+cv.resizeWindow(window_title, int(cols), int(rows))
+
+draw_junctions = False
+draw_terminations = False
+
+
+class ShownImage(Enum):
+    INPUT = 0
+    SKELETON = 1
+    JUNCTIONS = 2
+    FILTERED_JUNCTIONS = 3
+    TERMINATIONS = 4
+    FILTERED_TERMINATIONS = 5
+    BLUR = 6
+    SKELETON_MINUS_JUNCTIONS = 7
+
 
 local_region_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 3))
 averaging_kernel = local_region_kernel / np.sum(local_region_kernel)
-junction_create_kernel = cv.getStructuringElement(cv.MORPH_RECT, (3, 1))
 
+shown_image = ShownImage.INPUT
+while True:
+    key = cv.waitKey(1)
+    if key == ord("-"):
+        break
+    if key == ord("a"):
+        draw_junctions = not draw_junctions
+    if key == ord("s"):
+        draw_terminations = not draw_terminations
+    if key == ord("1"):
+        shown_image = ShownImage.INPUT
+    if key == ord("2"):
+        shown_image = ShownImage.SKELETON
+    if key == ord("3"):
+        shown_image = ShownImage.JUNCTIONS
+    if key == ord("4"):
+        shown_image = ShownImage.FILTERED_JUNCTIONS
+    if key == ord("5"):
+        shown_image = ShownImage.TERMINATIONS
+    if key == ord("6"):
+        shown_image = ShownImage.FILTERED_TERMINATIONS
+    if key == ord("7"):
+        shown_image = ShownImage.BLUR
+    if key == ord("8"):
+        shown_image = ShownImage.SKELETON_MINUS_JUNCTIONS
 
-def find_paths(mask):
+    img = cv.imread("paths7.png")
+
+    input_mask = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
     start_tick = cv.getTickCount()
-    skeleton = cv.ximgproc.thinning(mask, thinningType=cv.ximgproc.THINNING_GUOHALL)
-    rows, cols = mask.shape
-    # dilate only the bottom row to ensure that there are junctions at the bottom of the image
-    skeleton[rows - 1, :] = cv.dilate(
-        skeleton[rows - 1, :], junction_create_kernel, iterations=1
-    ).flatten()
+
+    skeleton = cv.ximgproc.thinning(
+        input_mask, thinningType=cv.ximgproc.THINNING_GUOHALL
+    )
     # averaging blur (used to count local pixels)
     averaged_mask = cv.filter2D(skeleton, -1, averaging_kernel)
     # All junctions are guaranteed to have > 3 pixels in the 8-neighborhood,
@@ -88,28 +147,26 @@ def find_paths(mask):
 
     junction_endpoint_mask = cv.bitwise_and(split_skeleton, expanded_junctions)
     # find the coordinates of all line endpoints (terminations and junctions)
-    junction_endpoint_coords = [
-        (int(x), int(y)) for (y, x) in np.argwhere(junction_endpoint_mask)
-    ]
-    termination_coords = [(int(x), int(y)) for (y, x) in np.argwhere(terminations)]
-    endpoint_coords = junction_endpoint_coords + termination_coords
+    junction_endpoint_coords = np.argwhere(junction_endpoint_mask)
+    termination_coords = np.argwhere(terminations)
+    endpoint_coords = np.vstack((junction_endpoint_coords, termination_coords))
 
     # we're gonna use these a lot...
     junction_endpoint_count = len(junction_endpoint_coords)
     termination_count = len(termination_coords)
     endpoint_count = junction_endpoint_count + termination_count
+    node_count = junction_count + termination_count
 
     # INDEXING EXPLANATION:
     # Nodes are indexed from 0 to node_count - 1,
     # where 0 to junction_count - 1 are junctions,
-    # and junction_endpoint_count to endpoint_count - 1 are terminations.
+    # and junction_count to node_count - 1 are terminations.
     # Endpoints are indexed from 0 to endpoint_count - 1,
     # where 0 to junction_endpoint_count - 1 are junction endpoints,
     # and junction_endpoint_count to endpoint_count - 1 are terminations.
     # Any "node index" is the former, and any "endpoint index" is the latter.
 
     endpoint_junction_map = {}
-    junction_endpoint_map = {}
     # list of endpoints for each line
     line_endpoints = [[] for _ in range(line_count)]
 
@@ -130,14 +187,13 @@ def find_paths(mask):
     # associate junction endpoints with their junction
     for endpoint_idx, endpoint in enumerate(junction_endpoint_coords):
         for junction_idx, contour in enumerate(junction_contours):
-            dist = cv.pointPolygonTest(contour, endpoint, False)
+            dist = cv.pointPolygonTest(
+                contour, (int(endpoint[1]), int(endpoint[0])), False
+            )
             if dist < 0:
                 # not inside junction contour, skip
                 continue
             endpoint_junction_map[endpoint_idx] = junction_idx
-            if junction_idx not in junction_endpoint_map:
-                junction_endpoint_map[junction_idx] = []
-            junction_endpoint_map[junction_idx].append(endpoint_idx)
             break
 
     # keep a list of remaining endpoints to associate with lines
@@ -146,92 +202,148 @@ def find_paths(mask):
     # associate endpoints with their lines
     for line_idx, contour in enumerate(line_contours):
         endpoint_count = 0
+        clear_list = []
         for endpoint_idx in line_endpoint_indices_remaining:
             endpoint = endpoint_coords[endpoint_idx]
-            dist = cv.pointPolygonTest(contour, endpoint, False)
+            dist = cv.pointPolygonTest(
+                contour, (int(endpoint[1]), int(endpoint[0])), False
+            )
+            node_idx = endpoint_idx
+            if endpoint_idx < junction_endpoint_count:
+                node_idx = endpoint_junction_map[endpoint_idx]
             if dist >= 0:
-                line_endpoints[line_idx].append(endpoint_idx)
+                line_endpoints[line_idx].append(node_idx)
+                clear_list.append(endpoint_idx)
                 endpoint_count += 1
             if endpoint_count == 2:
                 # both endpoints found, no need to check further
                 break
 
         # remove associated endpoint from the list of those remaining
-        for endpoint_idx in line_endpoints[line_idx]:
+        for endpoint_idx in clear_list:
             line_endpoint_indices_remaining.remove(endpoint_idx)
 
+    G = nx.DiGraph()
+    for idx, (x, y) in enumerate(junction_coords):
+        G.add_node(idx, pos=(int(x), int(y)))
+    for idx, (y, x) in enumerate(termination_coords):
+        G.add_node(idx + junction_endpoint_count, pos=(int(x), int(y)))
+
+    G.add_edges_from(
+        [
+            (pair[0], pair[1], {"length": line_lengths[line_idx]})
+            for line_idx, pair in enumerate(line_endpoints)
+            if len(pair) == 2
+        ]
+    )
+
     # the root nodes of the node tree
-    tree_roots = []
-    # any node close to the bottom of the image may potentially be a root node,
-    # however due to how the skeletonization works, there will almost always be 2 terminator nodes
-    # right next to a junction node at the start of every path, and that makes things annoying,
-    # so we just search junction roots only instead. We also dilate the bottom row of the skeletonised image
-    # to ensure that there are junctions at the bottom of the image.
+    tree_termination_roots = []
+    tree_junction_roots = []
+    # any node close to the bottom of the image is a root node
 
-    # search for junction roots first, to ensure that potential loops will get overriden from terminator roots
+    for current_idx, (y, x) in enumerate(termination_coords):
+        if y >= rows - 5:
+            tree_termination_roots.append(current_idx + junction_endpoint_count)
+
     for current_idx, (x, y) in enumerate(junction_coords):
-        if y >= rows - config.values["algorithm"]["path_root_y_threshold"]:
-            tree_roots.append(current_idx)
+        if y >= rows - 5:
+            tree_junction_roots.append(current_idx)
 
-    def find_line(endpoint_idx):
-        """Find the line index for a given endpoint index."""
-        for line_idx, endpoints in enumerate(line_endpoints):
-            if endpoint_idx in endpoints:
-                if endpoints[0] == endpoint_idx:
-                    return (line_idx, endpoints[1])
-                else:
-                    return (line_idx, endpoints[0])
-        return None
+    def swap_edge(u, v):
+        data = G[v][u]
+        G.remove_edge(v, u)
+        G.add_edge(u, v, **data)
 
-    # Construct the node tree, starting from the root nodes.
-    # This uses the links (lines) between nodes, and the junction data to build a directed
-    # (hopefully acyclic!) graph where each node can have multiple child nodes.
-    tree = {}
-    for tree_idx, root_idx in enumerate(tree_roots):
-        tree[root_idx] = []
-        leaf_indices = []
-        if root_idx < junction_endpoint_count:
-            leaf_indices = [(root_idx, idx) for idx in junction_endpoint_map[root_idx]]
-        else:
-            leaf_indices = [(root_idx, root_idx)]
-        while leaf_indices:
-            (prev_idx, current_node_idx) = leaf_indices.pop(0)
+    for root in tree_junction_roots:
+        edges = [x for x in G.in_edges(root)]
+        for edge in edges:
+            swap_edge(root, edge[0])
 
-            line_data = find_line(current_node_idx)
-            if line_data is None:
-                print("Error: No line found for endpoint", current_node_idx)
-                continue
-            line_idx, other_endpoint_idx = line_data
-
-            # if it's a junction endpoint...
-            if other_endpoint_idx < junction_endpoint_count:
-                junction_idx = endpoint_junction_map[other_endpoint_idx]
-                if junction_idx is None:
-                    print("Error: No junction found for endpoint", current_node_idx)
-                    continue
-                other_nodes = junction_endpoint_map[junction_idx]
-                if other_endpoint_idx in other_nodes:
-                    other_nodes.remove(other_endpoint_idx)
-                tree[junction_idx] = []  # no loops allowed!
-                # if junction_idx in tree and prev_idx in tree[junction_idx]:
-                #     tree[junction_idx].remove((prev_idx, line_idx))
-
-                tree[prev_idx].append((junction_idx, line_idx))
-                leaf_indices.extend([(junction_idx, idx) for idx in other_nodes])
-            # otherwise, it's a termination
+    invalid_termination_roots = []
+    for root in tree_termination_roots:
+        edges = [x for x in G.in_edges(root)]
+        for edge in edges:
+            if edge[0] not in tree_junction_roots:
+                swap_edge(root, edge[0])
             else:
-                tree[other_endpoint_idx] = []  # ensure that there are no loops
-                tree[prev_idx].append((other_endpoint_idx, line_idx))
+                invalid_termination_roots.append(root)
 
+    for root in invalid_termination_roots:
+        tree_termination_roots.remove(root)
+
+    roots = tree_junction_roots + tree_termination_roots
+
+    def propagate_outward(graph, prev_node, this_node):
+        in_edges = [x for x in G.in_edges(this_node)]
+        for next_node, _ in in_edges:
+            if next_node != prev_node:
+                swap_edge(this_node, next_node)
+        out_edges = [x for x in G.out_edges(this_node)]
+        for _, next_node in out_edges:
+            propagate_outward(graph, this_node, next_node)
+
+    for root in roots:
+        propagate_outward(G, -1, root)
+
+    disp = None
+    match shown_image:
+        case ShownImage.INPUT:
+            disp = img.copy()
+        case ShownImage.SKELETON:
+            disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
+        case ShownImage.JUNCTIONS:
+            disp = cv.cvtColor(junctions, cv.COLOR_GRAY2BGR)
+        case ShownImage.FILTERED_JUNCTIONS:
+            disp = cv.cvtColor(expanded_junctions, cv.COLOR_GRAY2BGR)
+        case ShownImage.TERMINATIONS:
+            disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
+        case ShownImage.FILTERED_TERMINATIONS:
+            disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
+        case ShownImage.BLUR:
+            disp = cv.cvtColor(averaged_mask, cv.COLOR_GRAY2BGR)
+        case ShownImage.SKELETON_MINUS_JUNCTIONS:
+            disp = cv.cvtColor(split_skeleton, cv.COLOR_GRAY2BGR)
+
+    def draw_node(node_idx):
+        node = G.nodes[node_idx]
+        for edge in G.out_edges(node_idx):
+            pos = node["pos"]
+            child_pos = G.nodes[edge[1]]["pos"]
+            cv.arrowedLine(
+                disp,
+                (int(pos[0]), int(pos[1])),
+                (int(child_pos[0]), int(child_pos[1])),
+                (255, 255, 0),
+                1,
+            )
+            if draw_terminations:
+                cv.putText(
+                    disp,
+                    str(G.edges[edge]["length"]),
+                    (
+                        (int(pos[0]) + int(child_pos[0])) // 2,
+                        (int(pos[1]) + int(child_pos[1])) // 2,
+                    ),
+                    cv.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 0, 255),
+                )
+            draw_node(edge[1])
+
+    if draw_junctions:
+        for node in tree_junction_roots:
+            draw_node(node)
+        for node in tree_termination_roots:
+            draw_node(node)
+
+    if draw_junctions:
+        disp[expanded_junctions > 0] = (0, 255, 0)
+    if draw_terminations:
+        disp[terminations > 0] = (255, 0, 255)  # endpoints
     end_tick = cv.getTickCount()
     dt = (end_tick - start_tick) / cv.getTickFrequency()
+    print(dt)
 
-    return {
-        "tree": tree,
-        "roots": tree_roots,
-        "junctions": junction_coords,
-        "junction_endpoint_count": junction_endpoint_count,
-        "terminations": termination_coords,
-        "line_lengths": line_lengths,
-        "proc_time": dt,
-    }
+    cv.imshow(window_title, disp)
+cv.destroyAllWindows()
