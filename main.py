@@ -5,6 +5,7 @@
 # - line: A connection between two nodes
 # - endpoint: A point on either end of a line which needs to be associated with a node
 
+import os
 import config
 import cv2 as cv
 import math
@@ -60,10 +61,10 @@ class ShownImage(Enum):
     PATH_MASK = 42
 
 
-cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
-if not cap.isOpened():
-    print("Cannot open camera")
-    exit()
+# cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
+# if not cap.isOpened():
+#     print("Cannot open camera")
+#     exit()
 
 prev_offsets = np.zeros(7)
 
@@ -74,6 +75,18 @@ hw = hardware.EGB320HardwareAPI(
     baudrate=config.values["hardware"]["baudrate"],
 )
 # hw.open()
+
+test_img_idx = 0
+
+test_img_dir = "photos"
+
+contents = os.listdir(test_img_dir)
+photos = []
+for content in contents:
+    content_path = os.path.join(test_img_dir, content)
+    if os.path.isfile(content_path):
+        photos.append(content_path)
+
 
 shown_image = ShownImage.INPUT
 while True:
@@ -119,9 +132,14 @@ while True:
         shown_image = ShownImage.LAPLACIAN
     if key == ord("c"):
         shown_image = ShownImage.PATH_MASK
+    if key == ord(","):
+        test_img_idx = (test_img_idx - 1) % len(photos)
+    if key == ord("."):
+        test_img_idx = (test_img_idx + 1) % len(photos)
 
     # img = cv.imread("paths7.png")
-    _, img = cap.read()
+    img = cv.imread(photos[test_img_idx])
+    # _, img = cap.read()
     rows, cols, channels = img.shape
 
     img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
@@ -225,10 +243,10 @@ while True:
 
     tree_lens = [int(get_tree_len(x)) for x in tree_roots]
     chosen_root = tree_lens.index(max(tree_lens)) if tree_lens else -1
-    if chosen_root >= 0:
-        tree_roots = [chosen_root]
+    # if chosen_root >= 0:
+    #     tree_roots = [chosen_root]
 
-    def get_best_node(node_idx, best_idx, current_coords):
+    def get_best_node(node_idx, best_idx, current_coords, prev_heuristic=0):
         is_junction = node_idx < junction_endpoint_count
         x, y = (
             junction_coords[node_idx]
@@ -236,7 +254,7 @@ while True:
             else termination_coords[node_idx - junction_endpoint_count]
         )
         best_coords = current_coords
-        if y < (rows - 20) and y < current_coords[1]:
+        if y < current_coords[1]:
             best_coords = (x, y)
             best_idx = node_idx
         if is_junction:
@@ -342,7 +360,7 @@ while True:
                             current_pos,
                             child_pos,
                             (255, 255, 0),
-                            1,
+                            2,
                         )
                         if draw_terminations:
                             cv.putText(
@@ -358,7 +376,7 @@ while True:
                             )
 
     if chosen_root >= 0:
-        cv.arrowedLine(disp, junction_coords[chosen_root], best_coords, (0, 255, 0), 1)
+        cv.arrowedLine(disp, junction_coords[chosen_root], best_coords, (0, 255, 0), 2)
     # if draw_junctions:
     #     disp[expanded_junctions > 0] = (0, 255, 0)
     # if draw_terminations:
