@@ -222,7 +222,7 @@ def _update_coefficients():
     _steering_pid.Kd = pid_cfg["steering"]["Kd"]
     _steering_pid.reset()
 
-    _strafing_pid = pid_cfg["strafing"]["Kp"]
+    _strafing_pid.Kp = pid_cfg["strafing"]["Kp"]
     _strafing_pid.Ki = pid_cfg["strafing"]["Ki"]
     _strafing_pid.Kd = pid_cfg["strafing"]["Kd"]
     _strafing_pid.reset()

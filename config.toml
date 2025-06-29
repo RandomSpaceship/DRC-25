@@ -1,22 +1,23 @@
 [algorithm]
 processing_scale = 0.5
 path_root_y_threshold = 5
-sidebar_height = 200
+sidebar_height = 100
 blackbar_height = 300
 
 [algorithm.thresholds.colors]
-blue = [105, 128, 150]
-yellow = [30, 110, 170]
+blue = [105, 173, 130]
+yellow = [35, 75, 165]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.thresholds.ranges]
-blue = [20, 180, 200]
-yellow = [50, 70, 80]
+blue = [15, 255, 255]
+yellow = [22, 104, 79]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.denoising]
+path_edge_detection = 5
 
 [hardware]
 enable = true

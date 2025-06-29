@@ -177,7 +177,7 @@ def find_paths(mask):
         """Find the line index for a given endpoint index."""
         for line_idx, endpoints in enumerate(line_endpoints):
             if len(endpoints) != 2:
-                return None
+                continue
             if endpoint_idx in endpoints:
                 if endpoints[0] == endpoint_idx:
                     return (line_idx, endpoints[1])
@@ -189,6 +189,7 @@ def find_paths(mask):
     # This uses the links (lines) between nodes, and the junction data to build a directed
     # (hopefully acyclic!) graph where each node can have multiple child nodes.
     tree = {}
+    edge_range = config.values["algorithm"]["denoising"]["path_edge_detection"]
     for tree_idx, root_idx in enumerate(tree_roots):
         tree[root_idx] = []
         leaf_indices = []
@@ -199,13 +200,26 @@ def find_paths(mask):
         else:
             leaf_indices = [(root_idx, root_idx)]
         while leaf_indices:
-            (prev_idx, current_node_idx) = leaf_indices.pop(0)
+            (prev_idx, current_endpoint_idx) = leaf_indices.pop(0)
+            current_coords = endpoint_coords[current_endpoint_idx]
 
-            line_data = find_line(current_node_idx)
+            line_data = find_line(current_endpoint_idx)
             if line_data is None:
                 # print("Error: No line found for endpoint", current_node_idx)
                 continue
             line_idx, other_endpoint_idx = line_data
+            next_coords = endpoint_coords[other_endpoint_idx]
+            # if it's a link along an image edge, ignore it
+            horizontal_link = abs(current_coords[1] - next_coords[1]) < edge_range
+            vertical_link = abs(current_coords[0] - next_coords[0]) < edge_range
+            if horizontal_link and (
+                current_coords[1] < edge_range or current_coords[1] > rows - edge_range
+            ):
+                continue
+            if vertical_link and (
+                current_coords[0] < edge_range or current_coords[0] > cols - edge_range
+            ):
+                continue
 
             # if it's a junction endpoint...
             if other_endpoint_idx < junction_endpoint_count:
@@ -238,4 +252,7 @@ def find_paths(mask):
         "terminations": termination_coords,
         "line_lengths": line_lengths,
         "proc_time": dt,
+        "skeleton": skeleton,
+        "junction_mask": junctions,
+        "termination_mask": terminations,
     }
