@@ -19,8 +19,6 @@ print("\r\n\r\nDRC Main Launch File")
 
 print(config.values)
 
-# hardware_api = hardware.HardwareAPI()
-
 window_title = "Pathfinder"
 
 mouse_x = 0
@@ -123,8 +121,8 @@ while True:
         shown_image = ShownImage.TESTING_1
     if key == ord("2"):
         shown_image = ShownImage.TESTING_2
-    # if key == ord("3"):
-    #     shown_image = ShownImage.TESTING_3
+    if key == ord("3"):
+        shown_image = ShownImage.TESTING_3
     # if key == ord("4"):
     #     shown_image = ShownImage.TESTING_4
     if key == ord("5"):
@@ -266,7 +264,7 @@ while True:
     )
     # path_mask = cv.morphologyEx(path_mask, cv.MORPH_OPEN, path_denoise_kernel)
 
-    test_img = cv.multiply(voronoi, first_pass_paths, dtype=cv.CV_16S)
+    test_img = cv.multiply(voronoi, first_pass_paths, dtype=cv.CV_32S)
     test_img = cv.normalize(
         test_img,
         None,
@@ -279,6 +277,17 @@ while True:
     _, test_img_2 = cv.threshold(test_img, test_thresh, 255, cv.THRESH_BINARY)
     second_pass_paths = test_img_2
     # path_mask = test_img
+
+    test_img_3 = voronoi.copy()
+    test_img_3[first_pass_paths == 0] = 0
+    test_img_3 = cv.normalize(
+        test_img_3,
+        None,
+        0,
+        255,
+        cv.NORM_MINMAX,
+        cv.CV_8UC1,
+    )
 
     path_data = pathfinder.find_paths(second_pass_paths)
     tree = path_data["tree"]
@@ -342,22 +351,6 @@ while True:
 
     disp = img.copy()
     match shown_image:
-        #     case ShownImage.INPUT:
-        #         disp = img.copy()
-        #     case ShownImage.SKELETON:
-        #         disp = cv.cvtColor(skeleton, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.JUNCTIONS:
-        #         disp = cv.cvtColor(junctions, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.FILTERED_JUNCTIONS:
-        #         disp = cv.cvtColor(expanded_junctions, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.TERMINATIONS:
-        #         disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.FILTERED_TERMINATIONS:
-        #         disp = cv.cvtColor(terminations, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.BLUR:
-        #         disp = cv.cvtColor(averaged_mask, cv.COLOR_GRAY2BGR)
-        #     case ShownImage.SKELETON_MINUS_JUNCTIONS:
-        #         disp = cv.cvtColor(split_skeleton, cv.COLOR_GRAY2BGR)
         case ShownImage.TESTING_1:
             disp = cv.cvtColor(test_img, cv.COLOR_GRAY2BGR)
         case ShownImage.TESTING_2:

@@ -17,7 +17,7 @@ magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.denoising]
-path_edge_detection = 5
+image_edge_distance = 5
 
 [hardware]
 enable = true

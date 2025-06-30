@@ -189,7 +189,7 @@ def find_paths(mask):
     # This uses the links (lines) between nodes, and the junction data to build a directed
     # (hopefully acyclic!) graph where each node can have multiple child nodes.
     tree = {}
-    edge_range = config.values["algorithm"]["denoising"]["path_edge_detection"]
+    edge_distance = config.values["algorithm"]["denoising"]["image_edge_distance"]
     for tree_idx, root_idx in enumerate(tree_roots):
         tree[root_idx] = []
         leaf_indices = []
@@ -210,14 +210,16 @@ def find_paths(mask):
             line_idx, other_endpoint_idx = line_data
             next_coords = endpoint_coords[other_endpoint_idx]
             # if it's a link along an image edge, ignore it
-            horizontal_link = abs(current_coords[1] - next_coords[1]) < edge_range
-            vertical_link = abs(current_coords[0] - next_coords[0]) < edge_range
+            horizontal_link = abs(current_coords[1] - next_coords[1]) < edge_distance
+            vertical_link = abs(current_coords[0] - next_coords[0]) < edge_distance
             if horizontal_link and (
-                current_coords[1] < edge_range or current_coords[1] > rows - edge_range
+                current_coords[1] < edge_distance
+                or current_coords[1] > rows - edge_distance
             ):
                 continue
             if vertical_link and (
-                current_coords[0] < edge_range or current_coords[0] > cols - edge_range
+                current_coords[0] < edge_distance
+                or current_coords[0] > cols - edge_distance
             ):
                 continue
 
