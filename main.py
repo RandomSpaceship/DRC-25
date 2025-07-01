@@ -5,6 +5,7 @@
 # - line: A connection between two nodes
 # - endpoint: A point on either end of a line which needs to be associated with a node
 
+import time
 import os
 import config
 import cv2 as cv
@@ -291,7 +292,9 @@ while True:
 
     path_data = pathfinder.find_paths(second_pass_paths)
     tree = path_data["tree"]
+    inverse_tree = path_data["inverse_tree"]
     tree_roots = path_data["roots"]
+    tree_endpoint_roots = path_data["endpoint_roots"]
     junction_coords = path_data["junctions"]
     junction_endpoint_count = path_data["junction_endpoint_count"]
     termination_coords = path_data["terminations"]
@@ -308,40 +311,66 @@ while True:
             accumulator += get_tree_len(next_node)
         return accumulator
 
-    tree_lens = [int(get_tree_len(x)) for x in tree_roots]
-    chosen_root = tree_lens.index(max(tree_lens)) if tree_lens else -1
+    def get_longest_tree(prev):
+        if not tree[prev]:
+            return [(prev, 0)]
+
+        best_link = None
+        for next_node, line in tree[prev]:
+            len = line_lengths[line]
+
+    # tree_lens = [int(get_tree_len(x)) for x in tree_roots]
+    # chosen_root = tree_lens.index(max(tree_lens)) if tree_lens else -1
     # if chosen_root >= 0:
     #     tree_roots = [chosen_root]
 
-    def get_best_node(node_idx, best_idx, current_coords, prev_heuristic=0):
-        is_junction = node_idx < junction_endpoint_count
-        x, y = (
-            junction_coords[node_idx]
-            if is_junction
-            else termination_coords[node_idx - junction_endpoint_count]
-        )
-        best_coords = current_coords
-        if y < current_coords[1]:
-            best_coords = (x, y)
-            best_idx = node_idx
-        if is_junction:
-            for next_node, line in tree[node_idx]:
-                (best_idx, best_coords) = get_best_node(
-                    next_node, best_idx, best_coords
-                )
+    def heuristic(coords):
+        dx = coords[0] - mouse_x
+        dy = coords[1] - mouse_y
+        return (dx * dx) + (dy * dy)
 
-        # print(best_coords)
-        return (best_idx, best_coords)
+    def idx_to_coords(idx):
+        if idx < junction_endpoint_count:
+            return junction_coords[idx]
+        else:
+            return termination_coords[idx - junction_endpoint_count]
 
-    best_idx = 0
-    best_coords = (1000, 1000)
-    if chosen_root >= 0:
-        best_idx, best_coords = get_best_node(chosen_root, -1, (1000, 1000))
+    # def get_best_node(this_node_idx, best_node_idx=-1, best_heuristic=9999999):
+    #     is_junction = this_node_idx < junction_endpoint_count
+    #     current_coords = idx_to_coords(this_node_idx)
+    #     this_heuristic = heuristic(current_coords)
+    #     if this_heuristic < best_heuristic:
+    #         best_heuristic = this_heuristic
+    #         best_node_idx = this_node_idx
+
+    #     if is_junction:
+    #         for next_node, _ in tree[this_node_idx]:
+    #             best_node_idx, best_heuristic = get_best_node(
+    #                 next_node, best_node_idx, best_heuristic
+    #             )
+
+    #     return (best_node_idx, best_heuristic)
+
+    best_heuristic = 9999999
+    best_idx = -1
+    for node in tree.keys():
+        coords = idx_to_coords(node)
+        this_heuristic = heuristic(coords)
+        if this_heuristic < best_heuristic:
+            best_heuristic = this_heuristic
+            best_idx = node
+
+    # best_idx = 0
+    # best_coords = (1000, 1000)
+    if best_idx >= 0:
+        # best_idx, _ = get_best_node(chosen_root)
+        best_coords = idx_to_coords(best_idx)
         # print(best_coords)
         if best_idx >= 0:
+            h_error = 0
             # h_error = best_coords[0] - cols / 2
-            h_error = junction_coords[chosen_root][0] - cols / 2
-            h_error /= cols / 2
+            # h_error = junction_coords[chosen_root][0] - cols / 2
+            # h_error /= cols / 2
             # print(h_error)
             prev_offsets = np.roll(prev_offsets, 1)
             prev_offsets[0] = h_error
@@ -440,10 +469,22 @@ while True:
                                 0.5,
                                 (255, 0, 255),
                             )
-        if chosen_root >= 0:
+        if best_idx >= 0:
             cv.arrowedLine(
-                disp, junction_coords[chosen_root], best_coords, (0, 255, 0), 2
+                disp,
+                junction_coords[tree_endpoint_roots[best_idx]],
+                best_coords,
+                (0, 255, 0),
+                2,
             )
+            if best_idx in inverse_tree:
+                cv.arrowedLine(
+                    disp,
+                    idx_to_coords(inverse_tree[best_idx]),
+                    idx_to_coords(best_idx),
+                    (0, 0, 255),
+                    2,
+                )
 
     # if draw_junctions:
     #     disp[expanded_junctions > 0] = (0, 255, 0)
@@ -489,5 +530,6 @@ while True:
             print("Range")
             print(f"{(max_hsv - min_hsv).tolist()}")
 
+    time.sleep(1 / 20)
     cv.imshow(window_title, disp)
 cv.destroyAllWindows()

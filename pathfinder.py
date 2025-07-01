@@ -189,9 +189,11 @@ def find_paths(mask):
     # This uses the links (lines) between nodes, and the junction data to build a directed
     # (hopefully acyclic!) graph where each node can have multiple child nodes.
     tree = {}
+    tree_endpoint_roots = {}
     edge_distance = config.values["algorithm"]["denoising"]["image_edge_distance"]
     for tree_idx, root_idx in enumerate(tree_roots):
         tree[root_idx] = []
+        tree_endpoint_roots[root_idx] = root_idx
         leaf_indices = []
         if root_idx < junction_endpoint_count:
             if root_idx not in junction_endpoint_map:
@@ -233,6 +235,7 @@ def find_paths(mask):
                 if other_endpoint_idx in other_nodes:
                     other_nodes.remove(other_endpoint_idx)
                 tree[junction_idx] = []  # no loops allowed!
+                tree_endpoint_roots[junction_idx] = root_idx
                 # if junction_idx in tree and prev_idx in tree[junction_idx]:
                 #     tree[junction_idx].remove((prev_idx, line_idx))
 
@@ -242,13 +245,20 @@ def find_paths(mask):
             else:
                 tree[other_endpoint_idx] = []  # ensure that there are no loops
                 tree[prev_idx].append((other_endpoint_idx, line_idx))
+                tree_endpoint_roots[other_endpoint_idx] = root_idx
 
     end_tick = cv.getTickCount()
     dt = (end_tick - start_tick) / cv.getTickFrequency()
 
+    inverse_tree = {}
+    for k, values in tree.items():
+        for prev, _ in values:
+            inverse_tree[prev] = k
     return {
         "tree": tree,
+        "inverse_tree": inverse_tree,
         "roots": tree_roots,
+        "endpoint_roots": tree_endpoint_roots,
         "junctions": junction_coords,
         "junction_endpoint_count": junction_endpoint_count,
         "terminations": termination_coords,
