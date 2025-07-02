@@ -120,7 +120,7 @@ shown_image = ShownImage.RGB
 while True:
     key = None
     if do_display:
-        key = cv.waitKey(200)
+        key = cv.waitKey(1)
         if key == ord("-"):
             break
         if key == ord("["):
@@ -481,7 +481,7 @@ while True:
             hw_turn *= scale
             hw_strafe *= scale
 
-        # print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
+        print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
 
         hw.update(hw_fwd, hw_turn, hw_strafe)
 

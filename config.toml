@@ -5,11 +5,11 @@ sidebar_height = 200
 blackbar_height = 0
 color_loss_threshold = 0.002
 display = false
-use_photos = true
+use_photos = false
 
 [algorithm.thresholds.colors]
 blue = [103, 108, 199]
-yellow = [30, 60, 193]
+yellow = [27, 60, 193]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
@@ -22,7 +22,7 @@ magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.thresholds.min]
-yellow = [0, 35, 0]
+yellow = [0, 70, 150]
 blue = [0, 45, 115]
 
 [algorithm.thresholds.max]
@@ -40,7 +40,7 @@ default_target_x = 0.5
 default_target_y = 0.1
 history_weighting = 0.4
 color_loss_offset = 0.5
-avg_size = 7
+avg_size = 2
 
 
 [hardware]
@@ -72,7 +72,7 @@ max = 200
 min = 50
 
 [hardware.control.steering]
-max = 100
+max = 250
 min = 50
 
 [hardware.control.strafing]

@@ -130,7 +130,7 @@ class MecanumHardwareAPI:
         rotate = int(rotate)
         strafe = int(strafe)
 
-        raw_data = struct.pack("<Bhhh", 0xAA, drive, rotate, strafe)
+        raw_data = struct.pack("<Bhhh", 0xAA, drive, strafe, rotate)
 
         try:
             self.serial.write(raw_data)
