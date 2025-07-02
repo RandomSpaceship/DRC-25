@@ -99,7 +99,7 @@ hw = hardware.MecanumHardwareAPI(
     port=config.values["hardware"]["port"],
     baudrate=config.values["hardware"]["baudrate"],
 )
-# hw.open()
+hw.open()
 
 test_img_idx = 0
 

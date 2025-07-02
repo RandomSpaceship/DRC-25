@@ -45,7 +45,7 @@ avg_size = 2
 
 [hardware]
 enable = true
-port = "/dev/ttyUSB0"
+port = "/dev/ttyACM0"
 baudrate = 115200
 update_freq = 25
 legacy_chassis = true
