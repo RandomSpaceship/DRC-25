@@ -68,15 +68,15 @@ Kd = 0.5
 Ki = 0
 
 [hardware.control.speeds]
-max = 350
+max = 400
 min = 50
 
 [hardware.control.steering]
-max = 500
+max = 650
 min = 50
 
 [hardware.control.strafing]
-max = 700
+max = 1000
 min = 50
 
 [display]
