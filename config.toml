@@ -40,7 +40,7 @@ default_target_x = 0.5
 default_target_y = 0.1
 history_weighting = 0.4
 color_loss_offset = 0.5
-avg_size = 2
+avg_size = 1
 
 
 [hardware]
@@ -55,7 +55,7 @@ camera_id = 0
 max_speed = 1000
 max_turn = 1000
 max_strafe = 1000
-max_sum = 400
+max_sum = 1000
 
 [hardware.pid.steering]
 Kp = 3.0
@@ -68,15 +68,15 @@ Kd = 0.5
 Ki = 0
 
 [hardware.control.speeds]
-max = 200
+max = 350
 min = 50
 
 [hardware.control.steering]
-max = 250
+max = 500
 min = 50
 
 [hardware.control.strafing]
-max = 200
+max = 700
 min = 50
 
 [display]
