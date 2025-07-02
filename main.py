@@ -118,6 +118,7 @@ target_coords = None
 
 shown_image = ShownImage.RGB
 while True:
+    start_ticks = cv.getTickCount()
     key = None
     if do_display:
         key = cv.waitKey(1)
@@ -662,4 +663,7 @@ while True:
                 print(f"{(max_hsv - min_hsv).tolist()}")
 
         cv.imshow(window_title, disp)
+    end_ticks = cv.getTickCount()
+    elapsed_time = (end_ticks - start_ticks) / cv.getTickFrequency()
+    print(f"dt: {elapsed_time:.3f}s")
 cv.destroyAllWindows()
