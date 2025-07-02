@@ -82,10 +82,10 @@ class ShownImage(Enum):
     TERMINATIONS = 45
 
 
-# cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
-# if not cap.isOpened():
-#     print("Cannot open camera")
-#     exit()
+cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
+if not cap.isOpened():
+    print("Cannot open camera")
+    exit()
 
 prev_offsets = np.zeros(7)
 
@@ -168,8 +168,8 @@ while True:
         config.reload()
 
     # img = cv.imread("paths7.png")
-    img = cv.imread(photos[test_img_idx])
-    # _, img = cap.read()
+    # img = cv.imread(photos[test_img_idx])
+    _, img = cap.read()
     rows, cols, channels = img.shape
 
     img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
