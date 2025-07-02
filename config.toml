@@ -1,23 +1,47 @@
 [algorithm]
 processing_scale = 0.5
 path_root_y_threshold = 5
-sidebar_height = 100
-blackbar_height = 300
+sidebar_height = 200
+blackbar_height = 0
+color_loss_threshold = 0.002
+display = false
+use_photos = true
 
 [algorithm.thresholds.colors]
-blue = [105, 173, 130]
-yellow = [35, 75, 165]
+blue = [103, 108, 199]
+yellow = [30, 60, 193]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
 [algorithm.thresholds.ranges]
-blue = [15, 255, 255]
-yellow = [22, 104, 79]
+# blue = [9, 132, 112]
+# yellow = [6, 55, 123]
+blue = [9, 255, 255]
+yellow = [9, 255, 255]
 magenta = [150, 0, 100]
 red = [150, 0, 0]
 
+[algorithm.thresholds.min]
+yellow = [0, 35, 0]
+blue = [0, 45, 115]
+
+[algorithm.thresholds.max]
+yellow = [255, 255, 255]
+blue = [255, 255, 255]
+
+[algorithm.pathfinding.thresholds]
+laplacian = 148
+
 [algorithm.denoising]
-image_edge_distance = 5
+image_edge_distance = 2
+
+[algorithm.navigation]
+default_target_x = 0.5
+default_target_y = 0.1
+history_weighting = 0.4
+color_loss_offset = 0.5
+avg_size = 7
+
 
 [hardware]
 enable = true
@@ -28,9 +52,10 @@ legacy_chassis = true
 camera_id = 0
 
 [hardware.limits]
-max_speed = 1.0
-max_turn = 1.0
-max_strafe = 1.0
+max_speed = 1000
+max_turn = 1000
+max_strafe = 1000
+max_sum = 400
 
 [hardware.pid.steering]
 Kp = 3.0
@@ -43,14 +68,16 @@ Kd = 0.5
 Ki = 0
 
 [hardware.control.speeds]
-min = 0.6
-max = 0.6
+max = 200
+min = 50
 
 [hardware.control.steering]
-max = 0.6
-min = 0.3
+max = 100
+min = 50
 
 [hardware.control.strafing]
+max = 200
+min = 50
 
 [display]
 use_remote = true

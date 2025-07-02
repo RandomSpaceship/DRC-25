@@ -4,6 +4,7 @@
 # - node: either a junction or a termination
 # - line: A connection between two nodes
 # - endpoint: A point on either end of a line which needs to be associated with a node
+import render_helpers
 
 import time
 import os
@@ -55,9 +56,11 @@ def mouse_event(event, x, y, flags, param):
         max_hsv = np.array([0, 0, 0])
 
 
-cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
-cv.resizeWindow(window_title, 640, 480)
-cv.setMouseCallback(window_title, mouse_event)
+do_display = config.values["algorithm"]["display"]
+if do_display:
+    cv.namedWindow(window_title, cv.WINDOW_GUI_NORMAL)
+    cv.resizeWindow(window_title, 640, 480)
+    cv.setMouseCallback(window_title, mouse_event)
 
 draw_junctions = False
 draw_terminations = False
@@ -82,16 +85,17 @@ class ShownImage(Enum):
     TERMINATIONS = 45
 
 
-cap = cv.VideoCapture(config.values["hardware"]["camera_id"])
-if not cap.isOpened():
-    print("Cannot open camera")
-    exit()
+cap = None
 
-prev_offsets = np.zeros(7)
+if not config.values["algorithm"]["use_photos"]:
+    cap = cv.VideoCapture(config.values["hardware"]["camera_id"])  #
+    if not cap.isOpened():
+        print("Cannot open camera")
+        exit()
 
 import hardware
 
-hw = hardware.EGB320HardwareAPI(
+hw = hardware.MecanumHardwareAPI(
     port=config.values["hardware"]["port"],
     baudrate=config.values["hardware"]["baudrate"],
 )
@@ -108,69 +112,81 @@ for content in contents:
     if os.path.isfile(content_path):
         photos.append(content_path)
 
+prev_turning_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_size"])
+prev_strafing_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_size"])
+target_coords = None
 
 shown_image = ShownImage.RGB
 while True:
-    key = cv.waitKey(1)
-    if key == ord("-"):
-        break
-    if key == ord("["):
-        draw_junctions = not draw_junctions
-    if key == ord("]"):
-        draw_terminations = not draw_terminations
-    if key == ord("1"):
-        shown_image = ShownImage.TESTING_1
-    if key == ord("2"):
-        shown_image = ShownImage.TESTING_2
-    if key == ord("3"):
-        shown_image = ShownImage.TESTING_3
-    # if key == ord("4"):
-    #     shown_image = ShownImage.TESTING_4
-    if key == ord("5"):
-        shown_image = ShownImage.TERMINATIONS
-    if key == ord("6"):
-        shown_image = ShownImage.FILTERED_TERMINATIONS
-    if key == ord("7"):
-        shown_image = ShownImage.BLUR
-    if key == ord("8"):
-        shown_image = ShownImage.SKELETON_MINUS_JUNCTIONS
+    key = None
+    if do_display:
+        key = cv.waitKey(200)
+        if key == ord("-"):
+            break
+        if key == ord("["):
+            draw_junctions = not draw_junctions
+        if key == ord("]"):
+            draw_terminations = not draw_terminations
+        if key == ord("1"):
+            shown_image = ShownImage.TESTING_1
+        if key == ord("2"):
+            shown_image = ShownImage.TESTING_2
+        if key == ord("3"):
+            shown_image = ShownImage.TESTING_3
+        # if key == ord("4"):
+        #     shown_image = ShownImage.TESTING_4
+        if key == ord("5"):
+            shown_image = ShownImage.TERMINATIONS
+        if key == ord("6"):
+            shown_image = ShownImage.FILTERED_TERMINATIONS
+        if key == ord("7"):
+            shown_image = ShownImage.BLUR
+        if key == ord("8"):
+            shown_image = ShownImage.SKELETON_MINUS_JUNCTIONS
 
-    if key == ord("a"):
-        shown_image = ShownImage.RGB
-    if key == ord("s"):
-        shown_image = ShownImage.HSV
-    if key == ord("d"):
-        shown_image = ShownImage.YELLOW
-    if key == ord("f"):
-        shown_image = ShownImage.BLUE
-    if key == ord("g"):
-        shown_image = ShownImage.COMBINED_RAW
-    if key == ord("h"):
-        shown_image = ShownImage.COMBINED
-    if key == ord("z"):
-        shown_image = ShownImage.VORONOI
-    if key == ord("x"):
-        shown_image = ShownImage.LAPLACIAN
-    if key == ord("c"):
-        shown_image = ShownImage.PATH_MASK
-    if key == ord("v"):
-        shown_image = ShownImage.SKELETON
-    if key == ord("b"):
-        shown_image = ShownImage.JUNCTIONS
-    if key == ord("n"):
-        shown_image = ShownImage.TERMINATIONS
-    if key == ord(","):
-        test_img_idx = (test_img_idx - 1) % len(photos)
-    if key == ord("."):
-        test_img_idx = (test_img_idx + 1) % len(photos)
+        if key == ord("a"):
+            shown_image = ShownImage.RGB
+        if key == ord("s"):
+            shown_image = ShownImage.HSV
+        if key == ord("d"):
+            shown_image = ShownImage.YELLOW
+        if key == ord("f"):
+            shown_image = ShownImage.BLUE
+        if key == ord("g"):
+            shown_image = ShownImage.COMBINED_RAW
+        if key == ord("h"):
+            shown_image = ShownImage.COMBINED
+        if key == ord("z"):
+            shown_image = ShownImage.VORONOI
+        if key == ord("x"):
+            shown_image = ShownImage.LAPLACIAN
+        if key == ord("c"):
+            shown_image = ShownImage.PATH_MASK
+        if key == ord("v"):
+            shown_image = ShownImage.SKELETON
+        if key == ord("b"):
+            shown_image = ShownImage.JUNCTIONS
+        if key == ord("n"):
+            shown_image = ShownImage.TERMINATIONS
+        if key == ord(","):
+            test_img_idx = (test_img_idx - 1) % len(photos)
+        if key == ord("."):
+            test_img_idx = (test_img_idx + 1) % len(photos)
 
-    if key == ord("R"):
-        config.reload()
+        if key == ord("R"):
+            config.reload()
+        if key == ord("Q"):
+            target_coords = None
 
-    # img = cv.imread("paths7.png")
-    # img = cv.imread(photos[test_img_idx])
-    _, img = cap.read()
+    img = None
+    if not config.values["algorithm"]["use_photos"]:
+        _, img = cap.read()
+    else:
+        img = cv.imread(photos[test_img_idx])
+    img = img[:, : img.shape[1] - 3, :]
     rows, cols, channels = img.shape
+    if not target_coords:
+        target_coords = (cols // 2, rows // 2)
 
     img_hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
 
@@ -194,30 +210,52 @@ while True:
     yellow_low = yellow_threshold - (yellow_range / 2)
     yellow_high = yellow_threshold + (yellow_range / 2)
 
+    if "blue" in config.values["algorithm"]["thresholds"]["min"]:
+        blue_min = np.array(config.values["algorithm"]["thresholds"]["min"]["blue"])
+        blue_low = np.maximum(blue_low, blue_min)
+    if "blue" in config.values["algorithm"]["thresholds"]["max"]:
+        blue_max = np.array(config.values["algorithm"]["thresholds"]["max"]["blue"])
+        blue_high = np.minimum(blue_high, blue_max)
+    if "yellow" in config.values["algorithm"]["thresholds"]["min"]:
+        yellow_min = np.array(config.values["algorithm"]["thresholds"]["min"]["yellow"])
+        yellow_low = np.maximum(yellow_low, yellow_min)
+    if "yellow" in config.values["algorithm"]["thresholds"]["max"]:
+        yellow_max = np.array(config.values["algorithm"]["thresholds"]["max"]["yellow"])
+        yellow_high = np.minimum(yellow_high, yellow_max)
+
     blue_mask = cv.inRange(img_hsv, blue_low, blue_high)
+    blue_count = cv.countNonZero(blue_mask)
     yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
+    yellow_count = cv.countNonZero(yellow_mask)
     combined_raw_mask = cv.bitwise_or(blue_mask, yellow_mask)
 
-    col_denoise_kernel_rad = 3
+    has_blue = blue_count > (
+        rows * cols * config.values["algorithm"]["color_loss_threshold"]
+    )
+    has_yellow = yellow_count > (
+        rows * cols * config.values["algorithm"]["color_loss_threshold"]
+    )
+
+    open_rad = 2
     color_denoise_kernel = cv.getStructuringElement(
-        cv.MORPH_RECT,
-        ((col_denoise_kernel_rad * 2) - 1, (col_denoise_kernel_rad * 2) - 1),
+        cv.MORPH_ELLIPSE,
+        ((open_rad * 2) - 1, (open_rad * 2) - 1),
     )
     combined_mask = cv.morphologyEx(
         combined_raw_mask, cv.MORPH_OPEN, color_denoise_kernel
     )
+
+    close_rad = 2
+    fillet_kernel = cv.getStructuringElement(
+        cv.MORPH_ELLIPSE,
+        ((close_rad * 2) - 1, (close_rad * 2) - 1),
+    )
+    combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, fillet_kernel)
     combined_mask[rows - 1 - config.values["algorithm"]["sidebar_height"] :, 0:10] = 255
     combined_mask[
         rows - 1 - config.values["algorithm"]["sidebar_height"] :,
         cols - 1 - 10 : cols - 1,
     ] = 255
-
-    fillet_kernel_r = 5
-    fillet_kernel = cv.getStructuringElement(
-        cv.MORPH_ELLIPSE,
-        ((fillet_kernel_r * 2) - 1, (fillet_kernel_r * 2) - 1),
-    )
-    combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, fillet_kernel)
 
     voronoi = cv.distanceTransform(cv.bitwise_not(combined_mask), cv.DIST_L2, 5)
 
@@ -243,6 +281,11 @@ while True:
         cv.NORM_MINMAX,
         cv.CV_8UC1,
     )
+    laplacian_kernel = cv.getStructuringElement(
+        cv.MORPH_ELLIPSE,
+        (3, 3),
+    )
+    laplacian = cv.erode(laplacian, laplacian_kernel, iterations=1)
 
     voronoi = cv.normalize(
         voronoi,
@@ -257,38 +300,42 @@ while True:
 
     # path_mask = cv.adaptiveThreshold(
     #     laplacian, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY, 11, 2)
-    _, first_pass_paths = cv.threshold(laplacian, 145, 255, cv.THRESH_BINARY)
-    # path_mask[0 : config.values["algorithm"]["blackbar_height"], :] = 0
+    _, first_pass_paths = cv.threshold(
+        laplacian,
+        config.values["algorithm"]["pathfinding"]["thresholds"]["laplacian"],
+        255,
+        cv.THRESH_BINARY,
+    )
+    first_pass_paths[0 : config.values["algorithm"]["blackbar_height"], :] = 0
     path_denoise_kernel = cv.getStructuringElement(
         cv.MORPH_RECT,
         (3, 3),
     )
-    # path_mask = cv.morphologyEx(path_mask, cv.MORPH_OPEN, path_denoise_kernel)
 
-    test_img = cv.multiply(voronoi, first_pass_paths, dtype=cv.CV_32S)
-    test_img = cv.normalize(
-        test_img,
+    paths_with_distance = cv.bitwise_and(voronoi, first_pass_paths)
+    paths_with_distance = cv.normalize(
+        paths_with_distance,
         None,
         0,
         255,
         cv.NORM_MINMAX,
         cv.CV_8UC1,
     )
-    test_thresh = np.max(test_img[rows - 10 - 1 : rows, :]) // 2
-    _, test_img_2 = cv.threshold(test_img, test_thresh, 255, cv.THRESH_BINARY)
-    second_pass_paths = test_img_2
-    # path_mask = test_img
-
-    test_img_3 = voronoi.copy()
-    test_img_3[first_pass_paths == 0] = 0
-    test_img_3 = cv.normalize(
-        test_img_3,
-        None,
-        0,
-        255,
-        cv.NORM_MINMAX,
-        cv.CV_8UC1,
+    path_second_pass_thresh = np.max(paths_with_distance[rows - 10 - 1 : rows, :]) // 2
+    _, second_pass_paths = cv.threshold(
+        paths_with_distance, path_second_pass_thresh, 255, cv.THRESH_BINARY
     )
+
+    # test_img_3 = voronoi.copy()
+    # test_img_3[first_pass_paths == 0] = 0
+    # test_img_3 = cv.normalize(
+    #     test_img_3,
+    #     None,
+    #     0,
+    #     255,
+    #     cv.NORM_MINMAX,
+    #     cv.CV_8UC1,
+    # )
 
     path_data = pathfinder.find_paths(second_pass_paths)
     tree = path_data["tree"]
@@ -311,13 +358,28 @@ while True:
             accumulator += get_tree_len(next_node)
         return accumulator
 
-    def get_longest_tree(prev):
-        if not tree[prev]:
-            return [(prev, 0)]
-
-        best_link = None
-        for next_node, line in tree[prev]:
-            len = line_lengths[line]
+    def get_tree_endpoint(node, prev_distance=0):
+        best_node = node
+        best_distance = prev_distance
+        for next_node, line in tree[node]:
+            (best_next_node, best_next_distance) = get_tree_endpoint(
+                next_node, prev_distance + line_lengths[line]
+            )
+            best_next_coords = idx_to_coords(best_next_node)
+            edge_distance = config.values["algorithm"]["denoising"][
+                "image_edge_distance"
+            ]
+            next_on_edge = (
+                # best_next_coords[0] <= edge_distance
+                # or best_next_coords[0] >= cols - 1 - edge_distance
+                # or
+                best_next_coords[1] <= edge_distance
+                or best_next_coords[1] >= rows - 1 - edge_distance
+            )
+            if best_next_distance > best_distance and not next_on_edge:
+                best_distance = best_next_distance
+                best_node = best_next_node
+        return (best_node, best_distance)
 
     # tree_lens = [int(get_tree_len(x)) for x in tree_roots]
     # chosen_root = tree_lens.index(max(tree_lens)) if tree_lens else -1
@@ -325,8 +387,8 @@ while True:
     #     tree_roots = [chosen_root]
 
     def heuristic(coords):
-        dx = coords[0] - mouse_x
-        dy = coords[1] - mouse_y
+        dx = coords[0] - target_coords[0]
+        dy = coords[1] - target_coords[1]
         return (dx * dx) + (dy * dy)
 
     def idx_to_coords(idx):
@@ -335,24 +397,9 @@ while True:
         else:
             return termination_coords[idx - junction_endpoint_count]
 
-    # def get_best_node(this_node_idx, best_node_idx=-1, best_heuristic=9999999):
-    #     is_junction = this_node_idx < junction_endpoint_count
-    #     current_coords = idx_to_coords(this_node_idx)
-    #     this_heuristic = heuristic(current_coords)
-    #     if this_heuristic < best_heuristic:
-    #         best_heuristic = this_heuristic
-    #         best_node_idx = this_node_idx
-
-    #     if is_junction:
-    #         for next_node, _ in tree[this_node_idx]:
-    #             best_node_idx, best_heuristic = get_best_node(
-    #                 next_node, best_node_idx, best_heuristic
-    #             )
-
-    #     return (best_node_idx, best_heuristic)
-
     best_heuristic = 9999999
     best_idx = -1
+    longest_node = -1
     for node in tree.keys():
         coords = idx_to_coords(node)
         this_heuristic = heuristic(coords)
@@ -365,171 +412,254 @@ while True:
     if best_idx >= 0:
         # best_idx, _ = get_best_node(chosen_root)
         best_coords = idx_to_coords(best_idx)
-        # print(best_coords)
-        if best_idx >= 0:
-            h_error = 0
-            # h_error = best_coords[0] - cols / 2
-            # h_error = junction_coords[chosen_root][0] - cols / 2
-            # h_error /= cols / 2
-            # print(h_error)
-            prev_offsets = np.roll(prev_offsets, 1)
-            prev_offsets[0] = h_error
-            final_err = np.mean(prev_offsets)
-            # print(final_err)
-            hw.update(20, -50 * final_err)
+        longest_node, _ = get_tree_endpoint(best_idx)
+        default_x = cols * config.values["algorithm"]["navigation"]["default_target_x"]
+        default_y = rows * config.values["algorithm"]["navigation"]["default_target_y"]
+        longest_x, longest_y = idx_to_coords(longest_node)
 
-    disp = img.copy()
-    match shown_image:
-        case ShownImage.TESTING_1:
-            disp = cv.cvtColor(test_img, cv.COLOR_GRAY2BGR)
-        case ShownImage.TESTING_2:
-            disp = cv.cvtColor(test_img_2, cv.COLOR_GRAY2BGR)
-        case ShownImage.TESTING_3:
-            disp = cv.cvtColor(test_img_3, cv.COLOR_GRAY2BGR)
-        case ShownImage.TESTING_4:
-            disp = cv.cvtColor(test_img_4, cv.COLOR_GRAY2BGR)
-        case ShownImage.RGB:
-            disp = img.copy()
-        case ShownImage.HSV:
-            disp = img_hsv.copy()
-        case ShownImage.BLUE:
-            disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
-        case ShownImage.YELLOW:
-            disp = cv.cvtColor(yellow_mask, cv.COLOR_GRAY2BGR)
-        case ShownImage.COMBINED_RAW:
-            disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
-        case ShownImage.COMBINED:
-            disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
-        case ShownImage.VORONOI:
-            normalised = cv.normalize(
-                voronoi,
-                None,
-                0,
-                255,
-                cv.NORM_MINMAX,
-                cv.CV_8UC1,
-            )
-            disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
-        case ShownImage.LAPLACIAN:
-            normalised = cv.normalize(
-                laplacian,
-                None,
-                0,
-                255,
-                cv.NORM_MINMAX,
-                cv.CV_8UC1,
-            )
-            disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
-        case ShownImage.PATH_MASK:
-            disp = cv.cvtColor(first_pass_paths, cv.COLOR_GRAY2BGR)
-        case ShownImage.SKELETON:
-            disp = cv.cvtColor(path_data["skeleton"], cv.COLOR_GRAY2BGR)
-        case ShownImage.JUNCTIONS:
-            disp = cv.cvtColor(path_data["junction_mask"], cv.COLOR_GRAY2BGR)
-        case ShownImage.TERMINATIONS:
-            disp = cv.cvtColor(path_data["termination_mask"], cv.COLOR_GRAY2BGR)
+        color_loss_offset = (cols / 2) * config.values["algorithm"]["navigation"][
+            "color_loss_offset"
+        ]
+        history_weighting = config.values["algorithm"]["navigation"][
+            "history_weighting"
+        ]
 
-    if draw_junctions:
-        # draw the node tree
-        for root_idx in tree_roots:
-            to_draw = [root_idx]
-            while to_draw:
-                current_idx = to_draw.pop(0)
-                if current_idx in tree:
-                    children = tree[current_idx]
-                    to_draw.extend([child[0] for child in children])
-                if current_idx >= 0 and current_idx in tree:
-                    current_pos = (
-                        junction_coords[current_idx]
-                        if current_idx < len(junction_coords)
-                        else termination_coords[current_idx - junction_endpoint_count]
-                    )
-                    for child_idx, line_idx in tree[current_idx]:
-                        child_pos = (
-                            junction_coords[child_idx]
-                            if child_idx < len(junction_coords)
-                            else termination_coords[child_idx - junction_endpoint_count]
-                        )
-                        cv.arrowedLine(
-                            disp,
-                            current_pos,
-                            child_pos,
-                            (255, 255, 0),
-                            2,
-                        )
-                        if draw_terminations:
-                            cv.putText(
+        color_offset = 0
+        if not has_blue:
+            color_offset += color_loss_offset
+        if not has_yellow:
+            color_offset -= color_loss_offset
+
+        target_x = int(
+            default_x + ((longest_x - default_x) * history_weighting) + color_offset
+        )
+        target_y = int(default_y + ((longest_y - default_y) * history_weighting))
+
+        if target_x < 0:
+            target_x = 0
+        if target_x >= cols:
+            target_x = cols - 1
+        if target_y < 0:
+            target_y = 0
+        if target_y >= rows:
+            target_y = rows - 1
+
+        target_coords = (target_x, target_y)
+
+        turning_error = 0
+        # h_error = best_coords[0] - cols / 2
+        # h_error = junction_coords[chosen_root][0] - cols / 2
+        # h_error /= cols / 2
+        # print(h_error)
+
+        strafing_error = idx_to_coords(tree_endpoint_roots[best_idx])[0] - cols / 2
+        turning_error = longest_x - cols / 2
+
+        strafing_error /= cols / 2
+        turning_error /= cols / 2
+
+        prev_turning_offsets = np.roll(prev_turning_offsets, 1)
+        prev_turning_offsets[0] = turning_error
+        prev_strafing_offsets = np.roll(prev_strafing_offsets, 1)
+        prev_strafing_offsets[0] = strafing_error
+
+        avg_turning_err = np.mean(prev_turning_offsets)
+        avg_strafing_err = np.mean(prev_strafing_offsets)
+
+        hw_fwd = config.values["hardware"]["control"]["speeds"]["max"]
+        hw_turn = (
+            avg_turning_err * config.values["hardware"]["control"]["steering"]["max"]
+        )
+        hw_strafe = (
+            avg_strafing_err * config.values["hardware"]["control"]["strafing"]["max"]
+        )
+
+        movement_sum = abs(hw_fwd) + abs(hw_turn) + abs(hw_strafe)
+        if movement_sum > config.values["hardware"]["limits"]["max_sum"]:
+            scale = config.values["hardware"]["limits"]["max_sum"] / movement_sum
+            hw_fwd *= scale
+            hw_turn *= scale
+            hw_strafe *= scale
+
+        # print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
+
+        hw.update(hw_fwd, hw_turn, hw_strafe)
+
+    if do_display:
+        disp = img.copy()
+        match shown_image:
+            case ShownImage.TESTING_1:
+                disp = cv.cvtColor(paths_with_distance, cv.COLOR_GRAY2BGR)
+            case ShownImage.TESTING_2:
+                disp = cv.cvtColor(second_pass_paths, cv.COLOR_GRAY2BGR)
+            case ShownImage.TESTING_3:
+                disp = cv.cvtColor(test_img_3, cv.COLOR_GRAY2BGR)
+            case ShownImage.TESTING_4:
+                disp = cv.cvtColor(test_img_4, cv.COLOR_GRAY2BGR)
+            case ShownImage.RGB:
+                disp = img.copy()
+            case ShownImage.HSV:
+                disp = img_hsv.copy()
+            case ShownImage.BLUE:
+                disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.YELLOW:
+                disp = cv.cvtColor(yellow_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.COMBINED_RAW:
+                disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.COMBINED:
+                disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.VORONOI:
+                normalised = cv.normalize(
+                    voronoi,
+                    None,
+                    0,
+                    255,
+                    cv.NORM_MINMAX,
+                    cv.CV_8UC1,
+                )
+                disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
+            case ShownImage.LAPLACIAN:
+                normalised = cv.normalize(
+                    laplacian,
+                    None,
+                    0,
+                    255,
+                    cv.NORM_MINMAX,
+                    cv.CV_8UC1,
+                )
+                disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
+            case ShownImage.PATH_MASK:
+                disp = cv.cvtColor(first_pass_paths, cv.COLOR_GRAY2BGR)
+            case ShownImage.SKELETON:
+                disp = cv.cvtColor(path_data["skeleton"], cv.COLOR_GRAY2BGR)
+            case ShownImage.JUNCTIONS:
+                disp = cv.cvtColor(path_data["junction_mask"], cv.COLOR_GRAY2BGR)
+            case ShownImage.TERMINATIONS:
+                disp = cv.cvtColor(path_data["termination_mask"], cv.COLOR_GRAY2BGR)
+
+        if draw_junctions:
+            # draw the node tree
+            for root_idx in tree_roots:
+                to_draw = [root_idx]
+                while to_draw:
+                    current_idx = to_draw.pop(0)
+                    if current_idx in tree:
+                        children = tree[current_idx]
+                        to_draw.extend([child[0] for child in children])
+                    if current_idx >= 0 and current_idx in tree:
+                        current_pos = idx_to_coords(current_idx)
+                        for child_idx, line_idx in tree[current_idx]:
+                            child_pos = idx_to_coords(child_idx)
+                            cv.arrowedLine(
                                 disp,
-                                str(line_lengths[line_idx]),
-                                (
-                                    (current_pos[0] + child_pos[0]) // 2,
-                                    (current_pos[1] + child_pos[1]) // 2,
-                                ),
-                                cv.FONT_HERSHEY_SIMPLEX,
-                                0.5,
-                                (255, 0, 255),
+                                current_pos,
+                                child_pos,
+                                (255, 255, 0),
+                                2,
                             )
-        if best_idx >= 0:
-            cv.arrowedLine(
-                disp,
-                junction_coords[tree_endpoint_roots[best_idx]],
-                best_coords,
-                (0, 255, 0),
-                2,
-            )
-            if best_idx in inverse_tree:
+                            if draw_terminations:
+                                cv.putText(
+                                    disp,
+                                    str(line_lengths[line_idx]),
+                                    (
+                                        (current_pos[0] + child_pos[0]) // 2,
+                                        (current_pos[1] + child_pos[1]) // 2,
+                                    ),
+                                    cv.FONT_HERSHEY_SIMPLEX,
+                                    0.5,
+                                    (255, 0, 255),
+                                )
+            if best_idx >= 0:
                 cv.arrowedLine(
                     disp,
-                    idx_to_coords(inverse_tree[best_idx]),
-                    idx_to_coords(best_idx),
+                    junction_coords[tree_endpoint_roots[best_idx]],
+                    best_coords,
+                    (0, 255, 0),
+                    2,
+                )
+                # if best_idx in inverse_tree:
+                #     cv.arrowedLine(
+                #         disp,
+                #         idx_to_coords(inverse_tree[best_idx]),
+                #         idx_to_coords(best_idx),
+                #         (0, 0, 255),
+                #         2,
+                #     )
+            if longest_node >= 0:
+                cv.arrowedLine(
+                    disp,
+                    idx_to_coords(tree_endpoint_roots[best_idx]),
+                    idx_to_coords(longest_node),
                     (0, 0, 255),
                     2,
                 )
 
-    # if draw_junctions:
-    #     disp[expanded_junctions > 0] = (0, 255, 0)
-    # if draw_terminations:
-    #     disp[terminations > 0] = (255, 0, 255)  # endpoints
-
-    if dragging:
-        cv.rectangle(
+        if not has_blue:
+            render_helpers.render_text(
+                disp,
+                "No blue",
+                (10, 30),
+                (255, 255, 255),
+            )
+        if not has_yellow:
+            render_helpers.render_text(
+                disp,
+                "No yellow",
+                (10, 60),
+                (255, 255, 255),
+            )
+        cv.drawMarker(
             disp,
-            (start_drag_x, start_drag_y),
-            (mouse_x, mouse_y),
+            target_coords,
             (255, 255, 255),
-            1,
+            markerType=cv.MARKER_CROSS,
+            markerSize=10,
+            thickness=2,
         )
 
-    def get_min_max_hsv(start_x, start_y, end_x, end_y):
-        if start_x > end_x:
-            start_x, end_x = end_x, start_x
-        if start_y > end_y:
-            start_y, end_y = end_y, start_y
-        min_hue = np.min(img_hsv[start_y:end_y, start_x:end_x, 0])
-        max_hue = np.max(img_hsv[start_y:end_y, start_x:end_x, 0])
-        min_sat = np.min(img_hsv[start_y:end_y, start_x:end_x, 1])
-        max_sat = np.max(img_hsv[start_y:end_y, start_x:end_x, 1])
-        min_val = np.min(img_hsv[start_y:end_y, start_x:end_x, 2])
-        max_val = np.max(img_hsv[start_y:end_y, start_x:end_x, 2])
-        return (
-            np.array([min_hue, min_sat, min_val]),
-            np.array([max_hue, max_sat, max_val]),
-        )
+        # if draw_junctions:
+        #     disp[expanded_junctions > 0] = (0, 255, 0)
+        # if draw_terminations:
+        #     disp[terminations > 0] = (255, 0, 255)  # endpoints
 
-    if set_avg:
-        set_avg = False
-        if start_drag_x == mouse_x or start_drag_y == mouse_y:
-            pass
-        else:
-            min_max = get_min_max_hsv(start_drag_x, start_drag_y, mouse_x, mouse_y)
-            print("y", min_max)
-            min_hsv = np.minimum(min_hsv, min_max[0])
-            max_hsv = np.maximum(max_hsv, min_max[1])
-            print("Colour")
-            print(f"{((min_hsv + max_hsv) // 2).tolist()}")
-            print("Range")
-            print(f"{(max_hsv - min_hsv).tolist()}")
+        if dragging:
+            cv.rectangle(
+                disp,
+                (start_drag_x, start_drag_y),
+                (mouse_x, mouse_y),
+                (255, 255, 255),
+                1,
+            )
 
-    time.sleep(1 / 20)
-    cv.imshow(window_title, disp)
+        def get_min_max_hsv(start_x, start_y, end_x, end_y):
+            if start_x > end_x:
+                start_x, end_x = end_x, start_x
+            if start_y > end_y:
+                start_y, end_y = end_y, start_y
+            min_hue = np.min(img_hsv[start_y:end_y, start_x:end_x, 0])
+            max_hue = np.max(img_hsv[start_y:end_y, start_x:end_x, 0])
+            min_sat = np.min(img_hsv[start_y:end_y, start_x:end_x, 1])
+            max_sat = np.max(img_hsv[start_y:end_y, start_x:end_x, 1])
+            min_val = np.min(img_hsv[start_y:end_y, start_x:end_x, 2])
+            max_val = np.max(img_hsv[start_y:end_y, start_x:end_x, 2])
+            return (
+                np.array([min_hue, min_sat, min_val]),
+                np.array([max_hue, max_sat, max_val]),
+            )
+
+        if set_avg:
+            set_avg = False
+            if start_drag_x == mouse_x or start_drag_y == mouse_y:
+                pass
+            else:
+                min_max = get_min_max_hsv(start_drag_x, start_drag_y, mouse_x, mouse_y)
+                print("y", min_max)
+                min_hsv = np.minimum(min_hsv, min_max[0])
+                max_hsv = np.maximum(max_hsv, min_max[1])
+                print("Colour")
+                print(f"{((min_hsv + max_hsv) // 2).tolist()}")
+                print("Range")
+                print(f"{(max_hsv - min_hsv).tolist()}")
+
+        cv.imshow(window_title, disp)
 cv.destroyAllWindows()

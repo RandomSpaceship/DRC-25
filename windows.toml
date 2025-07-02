@@ -1,7 +1,8 @@
 [algorithm]
 processing_scale = 1.0
+display = true
 
 [hardware]
 enable = true
-port = "COM18"
+port = "COM19"
 camera_id = 1
