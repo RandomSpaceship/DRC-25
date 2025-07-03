@@ -77,6 +77,7 @@ class ShownImage(Enum):
     BLUE = 31
     COMBINED_RAW = 32
     COMBINED = 33
+    MAGENTA = 34
     VORONOI = 40
     LAPLACIAN = 41
     PATH_MASK = 42
@@ -157,6 +158,8 @@ while True:
             shown_image = ShownImage.COMBINED_RAW
         if key == ord("h"):
             shown_image = ShownImage.COMBINED
+        if key == ord("j"):
+            shown_image = ShownImage.MAGENTA
         if key == ord("z"):
             shown_image = ShownImage.VORONOI
         if key == ord("x"):
@@ -201,15 +204,23 @@ while True:
     yellow_threshold = np.array(
         config.values["algorithm"]["thresholds"]["colors"]["yellow"]
     )
+    magenta_threshold = np.array(
+        config.values["algorithm"]["thresholds"]["colors"]["magenta"]
+    )
     blue_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["blue"])
     yellow_range = np.array(
         config.values["algorithm"]["thresholds"]["ranges"]["yellow"]
+    )
+    magenta_range = np.array(
+        config.values["algorithm"]["thresholds"]["ranges"]["magenta"]
     )
 
     blue_low = blue_threshold - (blue_range / 2)
     blue_high = blue_threshold + (blue_range / 2)
     yellow_low = yellow_threshold - (yellow_range / 2)
     yellow_high = yellow_threshold + (yellow_range / 2)
+    magenta_low = magenta_threshold - (magenta_range / 2)
+    magenta_high = magenta_threshold + (magenta_range / 2)
 
     if "blue" in config.values["algorithm"]["thresholds"]["min"]:
         blue_min = np.array(config.values["algorithm"]["thresholds"]["min"]["blue"])
@@ -228,6 +239,7 @@ while True:
     blue_count = cv.countNonZero(blue_mask)
     yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
     yellow_count = cv.countNonZero(yellow_mask)
+    magenta_mask = cv.inRange(img_hsv, magenta_low, magenta_high)
     combined_raw_mask = cv.bitwise_or(blue_mask, yellow_mask)
 
     has_blue = blue_count > (
@@ -509,6 +521,8 @@ while True:
                 disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
             case ShownImage.COMBINED:
                 disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.MAGENTA:
+                disp = cv.cvtColor(magenta_mask, cv.COLOR_GRAY2BGR)
             case ShownImage.VORONOI:
                 normalised = cv.normalize(
                     voronoi,

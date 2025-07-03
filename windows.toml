@@ -3,6 +3,6 @@ processing_scale = 1.0
 display = true
 
 [hardware]
-enable = true
+enable = false
 port = "COM19"
 camera_id = 1
