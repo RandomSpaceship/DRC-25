@@ -504,8 +504,8 @@ while True:
         hw_turn -= d_turning * config.values["hardware"]["pid"]["steering"]["Kd"]
         hw_strafe -= d_strafing * config.values["hardware"]["pid"]["strafing"]["Kd"]
 
-        if abs(hw_fwd) > config.values["hardware"]["limits"]["max_fwd"]:
-            hw_fwd = config.values["hardware"]["limits"]["max_fwd"] * (
+        if abs(hw_fwd) > config.values["hardware"]["limits"]["max_speed"]:
+            hw_fwd = config.values["hardware"]["limits"]["max_speed"] * (
                 1 if hw_fwd > 0 else -1
             )
         if abs(hw_turn) > config.values["hardware"]["limits"]["max_turn"]:
