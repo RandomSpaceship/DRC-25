@@ -59,12 +59,12 @@ max_sum = 1000
 
 [hardware.pid.steering]
 Kp = 3.0
-Kd = 0.5
+Kd = 0
 Ki = 0
 
 [hardware.pid.strafing]
 Kp = 3.0
-Kd = 0.5
+Kd = 0
 Ki = 0
 
 [hardware.control.speeds]

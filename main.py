@@ -118,6 +118,9 @@ prev_strafing_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_s
 target_coords = None
 
 shown_image = ShownImage.RGB
+prev_path_tick = cv.getTickCount()
+prev_strafe = 0
+prev_turn = 0
 while True:
     start_ticks = cv.getTickCount()
     key = None
@@ -481,6 +484,15 @@ while True:
         avg_turning_err = np.mean(prev_turning_offsets)
         avg_strafing_err = np.mean(prev_strafing_offsets)
 
+        d_turning = avg_turning_err - prev_turn
+        d_strafing = avg_strafing_err - prev_strafe
+        prev_turn = avg_turning_err
+        prev_strafe = avg_strafing_err
+
+        now = cv.getTickCount()
+        dt = (now - prev_path_tick) / cv.getTickFrequency()
+        prev_path_tick = now
+
         hw_fwd = config.values["hardware"]["control"]["speeds"]["max"]
         hw_turn = (
             avg_turning_err * config.values["hardware"]["control"]["steering"]["max"]
@@ -488,6 +500,22 @@ while True:
         hw_strafe = (
             avg_strafing_err * config.values["hardware"]["control"]["strafing"]["max"]
         )
+
+        hw_turn -= d_turning * config.values["hardware"]["pid"]["steering"]["Kd"]
+        hw_strafe -= d_strafing * config.values["hardware"]["pid"]["strafing"]["Kd"]
+
+        if abs(hw_fwd) > config.values["hardware"]["limits"]["max_fwd"]:
+            hw_fwd = config.values["hardware"]["limits"]["max_fwd"] * (
+                1 if hw_fwd > 0 else -1
+            )
+        if abs(hw_turn) > config.values["hardware"]["limits"]["max_turn"]:
+            hw_turn = config.values["hardware"]["limits"]["max_turn"] * (
+                1 if hw_turn > 0 else -1
+            )
+        if abs(hw_strafe) > config.values["hardware"]["limits"]["max_strafe"]:
+            hw_strafe = config.values["hardware"]["limits"]["max_strafe"] * (
+                1 if hw_strafe > 0 else -1
+            )
 
         movement_sum = abs(hw_fwd) + abs(hw_turn) + abs(hw_strafe)
         if movement_sum > config.values["hardware"]["limits"]["max_sum"]:
