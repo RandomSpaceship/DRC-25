@@ -10,7 +10,7 @@ use_photos = false
 [algorithm.thresholds.colors]
 blue = [103, 108, 199]
 yellow = [27, 60, 193]
-magenta = [230, 130, 70]
+magenta = [163, 120, 73]
 red = [150, 0, 0]
 
 [algorithm.thresholds.ranges]
@@ -18,7 +18,7 @@ red = [150, 0, 0]
 # yellow = [6, 55, 123]
 blue = [12, 500, 500]
 yellow = [9, 500, 500]
-magenta = [40, 60, 50]
+magenta = [13, 90, 500]
 red = [150, 0, 0]
 
 [algorithm.thresholds.min]

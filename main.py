@@ -240,7 +240,9 @@ while True:
     yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
     yellow_count = cv.countNonZero(yellow_mask)
     magenta_mask = cv.inRange(img_hsv, magenta_low, magenta_high)
-    combined_raw_mask = cv.bitwise_or(blue_mask, yellow_mask)
+    combined_raw_mask = cv.bitwise_or(
+        magenta_mask, cv.bitwise_or(blue_mask, yellow_mask)
+    )
 
     has_blue = blue_count > (
         rows * cols * config.values["algorithm"]["color_loss_threshold"]
@@ -249,7 +251,7 @@ while True:
         rows * cols * config.values["algorithm"]["color_loss_threshold"]
     )
 
-    open_rad = 2
+    open_rad = 1
     color_denoise_kernel = cv.getStructuringElement(
         cv.MORPH_ELLIPSE,
         ((open_rad * 2) - 1, (open_rad * 2) - 1),
@@ -258,7 +260,7 @@ while True:
         combined_raw_mask, cv.MORPH_OPEN, color_denoise_kernel
     )
 
-    close_rad = 2
+    close_rad = 1
     fillet_kernel = cv.getStructuringElement(
         cv.MORPH_ELLIPSE,
         ((close_rad * 2) - 1, (close_rad * 2) - 1),
