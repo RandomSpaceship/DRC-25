@@ -74,7 +74,7 @@ max = 500
 min = 50
 
 [hardware.control.steering]
-max = 500
+max = 450
 min = 50
 
 
