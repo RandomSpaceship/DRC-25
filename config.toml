@@ -3,27 +3,27 @@ processing_scale = 0.5
 path_root_y_threshold = 5
 sidebar_height = 1
 blackbar_height = 0
-color_loss_threshold = 0.002
+color_loss_threshold = 0.0015
 display = false
 use_photos = false
 
 [algorithm.thresholds.colors]
 blue = [103, 108, 199]
 yellow = [27, 60, 193]
-magenta = [163, 120, 73]
-red = [150, 0, 0]
+magenta = [163, 150, 73]
+red = [4, 117, 188]
 
 [algorithm.thresholds.ranges]
 # blue = [9, 132, 112]
 # yellow = [6, 55, 123]
 blue = [15, 500, 500]
 yellow = [15, 500, 500]
-magenta = [13, 90, 500]
-red = [150, 0, 0]
+magenta = [13, 120, 500]
+red = [9, 163, 133]
 
 [algorithm.thresholds.min]
 yellow = [0, 40, 180]
-blue = [0, 40, 50]
+blue = [0, 60, 50]
 
 [algorithm.thresholds.max]
 yellow = [255, 255, 255]
@@ -31,16 +31,18 @@ blue = [255, 255, 255]
 
 [algorithm.pathfinding.thresholds]
 laplacian = 148
+second_pass_threshold = 0.4
 
 [algorithm.denoising]
 image_edge_distance = 2
 
 [algorithm.navigation]
 default_target_x = 0.5
-default_target_y = 0.1
-history_weighting = 0.4
-color_loss_offset = 0.5
+default_target_y = 0.5
+history_weighting = 0.3
+color_loss_offset = 0
 avg_size = 2
+ratio_biasing = 150
 
 
 [hardware]

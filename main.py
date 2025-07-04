@@ -99,6 +99,7 @@ class ShownImage(Enum):
     COMBINED_RAW = 32
     COMBINED = 33
     MAGENTA = 34
+    RED = 35
     VORONOI = 40
     LAPLACIAN = 41
     PATH_MASK = 42
@@ -125,7 +126,7 @@ hw.open()
 
 test_img_idx = 0
 
-test_img_dir = "photos"
+test_img_dir = "archive"
 
 contents = os.listdir(test_img_dir)
 photos = []
@@ -185,6 +186,8 @@ while True:
             shown_image = ShownImage.COMBINED
         if key == ord("j"):
             shown_image = ShownImage.MAGENTA
+        if key == ord("k"):
+            shown_image = ShownImage.RED
         if key == ord("z"):
             shown_image = ShownImage.VORONOI
         if key == ord("x"):
@@ -212,6 +215,8 @@ while True:
         _, img = cap.read()
     else:
         img = cv.imread(photos[test_img_idx])
+    if img is None:
+        continue
     img = img[:, : img.shape[1] - 3, :]
     rows, cols, channels = img.shape
     if not target_coords:
@@ -232,6 +237,7 @@ while True:
     magenta_threshold = np.array(
         config.values["algorithm"]["thresholds"]["colors"]["magenta"]
     )
+    red_threshold = np.array(config.values["algorithm"]["thresholds"]["colors"]["red"])
     blue_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["blue"])
     yellow_range = np.array(
         config.values["algorithm"]["thresholds"]["ranges"]["yellow"]
@@ -239,6 +245,7 @@ while True:
     magenta_range = np.array(
         config.values["algorithm"]["thresholds"]["ranges"]["magenta"]
     )
+    red_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["red"])
 
     blue_low = blue_threshold - (blue_range / 2)
     blue_high = blue_threshold + (blue_range / 2)
@@ -246,6 +253,8 @@ while True:
     yellow_high = yellow_threshold + (yellow_range / 2)
     magenta_low = magenta_threshold - (magenta_range / 2)
     magenta_high = magenta_threshold + (magenta_range / 2)
+    red_low = red_threshold - (red_range / 2)
+    red_high = red_threshold + (red_range / 2)
 
     if "blue" in config.values["algorithm"]["thresholds"]["min"]:
         blue_min = np.array(config.values["algorithm"]["thresholds"]["min"]["blue"])
@@ -265,9 +274,20 @@ while True:
     yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
     yellow_count = cv.countNonZero(yellow_mask)
     magenta_mask = cv.inRange(img_hsv, magenta_low, magenta_high)
+    img_hsv_red = img_hsv.copy()
+    img_hsv_red[:, :, 0] = (
+        (img_hsv_red[:, :, 0].astype(np.uint16) + 128) % 256
+    ).astype(np.uint8)
+    red_mask = cv.inRange(img_hsv, red_low, red_high)
     combined_raw_mask = cv.bitwise_or(
         magenta_mask, cv.bitwise_or(blue_mask, yellow_mask)
     )
+
+    total_border_count = blue_count + yellow_count
+    border_ratio = 0
+    if total_border_count > 0:
+        border_ratio -= blue_count / total_border_count
+        border_ratio += yellow_count / total_border_count
 
     has_blue = blue_count > (
         rows * cols * config.values["algorithm"]["color_loss_threshold"]
@@ -335,6 +355,8 @@ while True:
         cv.NORM_MINMAX,
         cv.CV_8UC1,
     )
+    # voronoi = cv.multiply(voronoi, voronoi, dtype=cv.CV_16U)
+    # voronoi = cv.multiply(voronoi, voronoi, dtype=cv.CV_32F)
 
     # _, voronoi = cv.threshold(voronoi, 50, 255, cv.THRESH_BINARY)
 
@@ -351,6 +373,9 @@ while True:
         cv.MORPH_RECT,
         (3, 3),
     )
+    first_pass_paths = cv.morphologyEx(
+        first_pass_paths, cv.MORPH_OPEN, path_denoise_kernel
+    )
 
     paths_with_distance = cv.bitwise_and(voronoi, first_pass_paths)
     paths_with_distance = cv.normalize(
@@ -361,7 +386,12 @@ while True:
         cv.NORM_MINMAX,
         cv.CV_8UC1,
     )
-    path_second_pass_thresh = np.max(paths_with_distance[rows - 10 - 1 : rows, :]) // 2
+    path_second_pass_thresh = (
+        np.max(paths_with_distance[rows - 10 - 1 : rows, :])
+        * config.values["algorithm"]["pathfinding"]["thresholds"][
+            "second_pass_threshold"
+        ]
+    )
     _, second_pass_paths = cv.threshold(
         paths_with_distance, path_second_pass_thresh, 255, cv.THRESH_BINARY
     )
@@ -398,27 +428,57 @@ while True:
             accumulator += get_tree_len(next_node)
         return accumulator
 
-    def get_tree_endpoint(node, prev_distance=0):
-        best_node = node
-        best_distance = prev_distance
-        for next_node, line in tree[node]:
-            (best_next_node, best_next_distance) = get_tree_endpoint(
-                next_node, prev_distance + line_lengths[line]
-            )
-            best_next_coords = idx_to_coords(best_next_node)
-            edge_distance = config.values["algorithm"]["denoising"][
-                "image_edge_distance"
-            ]
-            next_on_edge = (
-                # best_next_coords[0] <= edge_distance
-                # or best_next_coords[0] >= cols - 1 - edge_distance
-                # or
-                best_next_coords[1] <= edge_distance
-                or best_next_coords[1] >= rows - 1 - edge_distance
-            )
-            if best_next_distance > best_distance and not next_on_edge:
-                best_distance = best_next_distance
-                best_node = best_next_node
+    def best_tree_heuristic(prev_heuristic, node, line):
+        coords = idx_to_coords(node)
+        distance = int(voronoi[coords[1], coords[0]])
+        line_len = line_lengths[line]
+        y_distance = coords[1] - rows
+        gain = line_len**1.5 * distance**3 * (y_distance**2)
+        # gain = distance
+
+        return prev_heuristic + gain
+
+    # def get_best_endpoint(node, prev_distance=0):
+    #     best_node = node
+    #     best_distance = prev_distance
+    #     for next_node, line in tree[node]:
+    #         (best_next_node, best_next_distance) = get_best_endpoint(
+    #             next_node, best_tree_heuristic(best_distance, next_node, line)
+    #         )
+    #         best_next_coords = idx_to_coords(best_next_node)
+    #         edge_distance = config.values["algorithm"]["denoising"][
+    #             "image_edge_distance"
+    #         ]
+    #         next_on_edge = (
+    #             # best_next_coords[0] <= edge_distance
+    #             # or best_next_coords[0] >= cols - 1 - edge_distance
+    #             # or
+    #             best_next_coords[1] <= edge_distance
+    #             or best_next_coords[1] >= rows - 1 - edge_distance
+    #         )
+    #         if best_next_distance > best_distance and not next_on_edge:
+    #             best_distance = best_next_distance
+    #             best_node = best_next_node
+    #     return (best_node, best_distance)
+    def get_best_endpoint(start_node):
+        nodes_to_check = [(start_node, 0)]
+        best_node = start_node
+        best_distance = 0
+        while nodes_to_check:
+            current_node, current_distance = nodes_to_check.pop(0)
+            if current_distance > best_distance:
+                best_distance = current_distance
+                best_node = current_node
+            children = tree[current_node]
+            for next_node, line_idx in children:
+                if next_node >= junction_endpoint_count and line_lengths[line_idx] < 10:
+                    continue
+                nodes_to_check.append(
+                    (
+                        next_node,
+                        best_tree_heuristic(current_distance, next_node, line_idx),
+                    )
+                )
         return (best_node, best_distance)
 
     # tree_lens = [int(get_tree_len(x)) for x in tree_roots]
@@ -426,10 +486,11 @@ while True:
     # if chosen_root >= 0:
     #     tree_roots = [chosen_root]
 
-    def heuristic(coords):
+    def best_node_heuristic(coords):
         dx = coords[0] - target_coords[0]
         dy = coords[1] - target_coords[1]
-        return (dx * dx) + (dy * dy)
+        voronoi_dist = int(voronoi[coords[1], coords[0]])
+        return ((dx * dx) + (dy * dy)) * (voronoi_dist**2)
 
     def idx_to_coords(idx):
         if idx < junction_endpoint_count:
@@ -437,12 +498,12 @@ while True:
         else:
             return termination_coords[idx - junction_endpoint_count]
 
-    best_heuristic = 9999999
+    best_heuristic = 9999999999999999999999999999
     best_idx = -1
     longest_node = -1
     for node in tree.keys():
         coords = idx_to_coords(node)
-        this_heuristic = heuristic(coords)
+        this_heuristic = best_node_heuristic(coords)
         if this_heuristic < best_heuristic:
             best_heuristic = this_heuristic
             best_idx = node
@@ -452,7 +513,7 @@ while True:
     if best_idx >= 0:
         # best_idx, _ = get_best_node(chosen_root)
         best_coords = idx_to_coords(best_idx)
-        longest_node, _ = get_tree_endpoint(best_idx)
+        longest_node, _ = get_best_endpoint(best_idx)
         default_x = cols * config.values["algorithm"]["navigation"]["default_target_x"]
         default_y = rows * config.values["algorithm"]["navigation"]["default_target_y"]
         longest_x, longest_y = idx_to_coords(longest_node)
@@ -464,7 +525,9 @@ while True:
             "history_weighting"
         ]
 
-        color_offset = 0
+        color_offset = (
+            border_ratio * config.values["algorithm"]["navigation"]["ratio_biasing"]
+        )
         if not has_blue:
             color_offset += color_loss_offset
         if not has_yellow:
@@ -559,7 +622,7 @@ while True:
             case ShownImage.TESTING_2:
                 disp = cv.cvtColor(second_pass_paths, cv.COLOR_GRAY2BGR)
             case ShownImage.TESTING_3:
-                disp = cv.cvtColor(test_img_3, cv.COLOR_GRAY2BGR)
+                disp = img_hsv_red.copy()
             case ShownImage.TESTING_4:
                 disp = cv.cvtColor(test_img_4, cv.COLOR_GRAY2BGR)
             case ShownImage.RGB:
@@ -576,6 +639,8 @@ while True:
                 disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
             case ShownImage.MAGENTA:
                 disp = cv.cvtColor(magenta_mask, cv.COLOR_GRAY2BGR)
+            case ShownImage.RED:
+                disp = cv.cvtColor(red_mask, cv.COLOR_GRAY2BGR)
             case ShownImage.VORONOI:
                 normalised = cv.normalize(
                     voronoi,

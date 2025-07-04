@@ -1,6 +1,7 @@
 [algorithm]
 processing_scale = 1.0
 display = true
+use_photos = true
 
 [hardware]
 enable = false
