@@ -41,6 +41,7 @@ min_hsv = np.array([255, 255, 255])
 max_hsv = np.array([0, 0, 0])
 
 should_stop = False
+should_start = False
 
 
 def mouse_event(event, x, y, flags, param):
@@ -77,8 +78,25 @@ def write_img():
             )
 
 
+def do_input():
+    global should_stop, should_start
+    while True:
+        c = input()
+        if c == "r":
+            print("reload")
+            config.reload()
+        if c == " ":
+            print("start")
+            should_start = not should_start
+        if c == "s":
+            print("stop")
+            should_stop = False
+
+
 image_writer = threading.Thread(target=write_img)
 image_writer.start()
+input_th = threading.Thread(target=do_input)
+input_th.start()
 
 do_display = config.values["algorithm"]["display"]
 if do_display:
@@ -629,7 +647,7 @@ while True:
 
         if should_stop:
             print("Stopping")
-        if should_stop and time.time() - stop_time > 0.5:
+        if (should_stop and time.time() - stop_time > 0.5) or not should_start:
             hw_fwd = 0
             hw_turn = 0
             hw_strafe = 0
