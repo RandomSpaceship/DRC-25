@@ -823,7 +823,7 @@ while True:
         print(f"dt: {elapsed_time:.3f}s")
 
     write_counter += 1
-    if write_counter >= 5:
+    if write_counter >= 3:
         write_counter = 0
         q.put(img.copy())
 q.put(False)
