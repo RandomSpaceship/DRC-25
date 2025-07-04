@@ -629,7 +629,7 @@ while True:
 
         if should_stop:
             print("Stopping")
-        if should_stop and time.time() - stop_time > 4:
+        if should_stop and time.time() - stop_time > 0.5:
             hw_fwd = 0
             hw_turn = 0
             hw_strafe = 0
