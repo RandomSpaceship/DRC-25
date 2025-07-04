@@ -69,7 +69,9 @@ def write_img():
         if img is False:
             break
         if not config.values["algorithm"]["use_photos"]:
-            cv.imwrite(f"archive/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg", img)
+            cv.imwrite(
+                f"archive/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg", img
+            )
 
 
 image_writer = threading.Thread(target=write_img)
