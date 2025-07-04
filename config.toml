@@ -1,7 +1,7 @@
 [algorithm]
 processing_scale = 0.5
 path_root_y_threshold = 5
-sidebar_height = 40
+sidebar_height = 1
 blackbar_height = 0
 color_loss_threshold = 0.002
 display = false
@@ -40,7 +40,7 @@ default_target_x = 0.5
 default_target_y = 0.1
 history_weighting = 0.4
 color_loss_offset = 0.5
-avg_size = 1
+avg_size = 2
 
 
 [hardware]
@@ -59,7 +59,7 @@ max_sum = 1000
 
 [hardware.pid.steering]
 Kp = 3.0
-Kd = 1
+Kd = 0.5
 Ki = 0
 
 [hardware.pid.strafing]
@@ -68,15 +68,16 @@ Kd = 0
 Ki = 0
 
 [hardware.control.speeds]
-max = 600
+max = 350
 min = 50
 
 [hardware.control.steering]
-max = 600
+max = 300
 min = 50
 
+
 [hardware.control.strafing]
-max = 4100
+max = 2500
 min = 50
 
 [display]
