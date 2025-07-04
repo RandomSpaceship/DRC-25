@@ -44,7 +44,7 @@ default_target_y = 0.5
 history_weighting = 0.3
 color_loss_offset = 0
 avg_size = 2
-ratio_biasing = 150
+ratio_biasing = 200
 
 
 [hardware]
@@ -72,7 +72,7 @@ Kd = 0
 Ki = 0
 
 [hardware.control.speeds]
-max = 550
+max = 650
 min = 50
 
 [hardware.control.steering]
@@ -81,7 +81,7 @@ min = 50
 
 
 [hardware.control.strafing]
-max = 4200
+max = 4500
 min = 50
 
 [display]
