@@ -29,6 +29,7 @@ window_title = "Pathfinder"
 mouse_x = 0
 mouse_y = 0
 
+stop_time = 0
 start_drag_x = 0
 start_drag_y = 0
 end_drag_x = 0
@@ -38,6 +39,8 @@ set_avg = False
 
 min_hsv = np.array([255, 255, 255])
 max_hsv = np.array([0, 0, 0])
+
+should_stop = False
 
 
 def mouse_event(event, x, y, flags, param):
@@ -124,9 +127,9 @@ hw = hardware.MecanumHardwareAPI(
 )
 hw.open()
 
-test_img_idx = 0
+test_img_idx = 74
 
-test_img_dir = "archive"
+test_img_dir = "photos"
 
 contents = os.listdir(test_img_dir)
 photos = []
@@ -161,8 +164,8 @@ while True:
             shown_image = ShownImage.TESTING_2
         if key == ord("3"):
             shown_image = ShownImage.TESTING_3
-        # if key == ord("4"):
-        #     shown_image = ShownImage.TESTING_4
+        if key == ord("4"):
+            shown_image = ShownImage.TESTING_4
         if key == ord("5"):
             shown_image = ShownImage.TERMINATIONS
         if key == ord("6"):
@@ -238,6 +241,9 @@ while True:
         config.values["algorithm"]["thresholds"]["colors"]["magenta"]
     )
     red_threshold = np.array(config.values["algorithm"]["thresholds"]["colors"]["red"])
+    green_threshold = np.array(
+        config.values["algorithm"]["thresholds"]["colors"]["green"]
+    )
     blue_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["blue"])
     yellow_range = np.array(
         config.values["algorithm"]["thresholds"]["ranges"]["yellow"]
@@ -246,6 +252,7 @@ while True:
         config.values["algorithm"]["thresholds"]["ranges"]["magenta"]
     )
     red_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["red"])
+    green_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["green"])
 
     blue_low = blue_threshold - (blue_range / 2)
     blue_high = blue_threshold + (blue_range / 2)
@@ -255,6 +262,8 @@ while True:
     magenta_high = magenta_threshold + (magenta_range / 2)
     red_low = red_threshold - (red_range / 2)
     red_high = red_threshold + (red_range / 2)
+    green_low = green_threshold - (green_range / 2)
+    green_high = green_threshold + (green_range / 2)
 
     if "blue" in config.values["algorithm"]["thresholds"]["min"]:
         blue_min = np.array(config.values["algorithm"]["thresholds"]["min"]["blue"])
@@ -279,6 +288,12 @@ while True:
         (img_hsv_red[:, :, 0].astype(np.uint16) + 128) % 256
     ).astype(np.uint8)
     red_mask = cv.inRange(img_hsv, red_low, red_high)
+    green_mask = cv.inRange(img_hsv, green_low, green_high)
+    green_count = cv.countNonZero(green_mask)
+    # print(green_count / (rows * cols))
+    if green_count > 0.03:
+        should_stop = True
+        stop_time = time.time()
     combined_raw_mask = cv.bitwise_or(
         magenta_mask, cv.bitwise_or(blue_mask, yellow_mask)
     )
@@ -612,6 +627,12 @@ while True:
         if not config.values["algorithm"]["use_photos"]:
             print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
 
+        if should_stop:
+            print("Stopping")
+        if should_stop and time.time() - stop_time > 4:
+            hw_fwd = 0
+            hw_turn = 0
+            hw_strafe = 0
         hw.update(hw_fwd, hw_turn, hw_strafe)
 
     if do_display:
@@ -624,7 +645,7 @@ while True:
             case ShownImage.TESTING_3:
                 disp = img_hsv_red.copy()
             case ShownImage.TESTING_4:
-                disp = cv.cvtColor(test_img_4, cv.COLOR_GRAY2BGR)
+                disp = cv.cvtColor(green_mask, cv.COLOR_GRAY2BGR)
             case ShownImage.RGB:
                 disp = img.copy()
             case ShownImage.HSV:

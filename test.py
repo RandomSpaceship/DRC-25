@@ -1,3 +1,7 @@
+import queue
+import threading
+import time
+import asyncio
 import os
 import math
 import numpy as np
@@ -21,3 +25,25 @@ a2 = np.array([4, 5, 6])
 
 print((a1 + a2) // 2)
 print(math.sqrt(256))
+
+q = queue.Queue()
+
+
+def test():
+    while True:
+        a = q.get()
+        if a is False:
+            break
+        print(a)
+
+
+thread = threading.Thread(target=test)
+thread.start()
+
+print("a")
+q.put("Hello")
+print("c")
+time.sleep(2)
+print("d")
+q.put(False)
+thread.join()
