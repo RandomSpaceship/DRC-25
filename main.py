@@ -127,9 +127,9 @@ hw = hardware.MecanumHardwareAPI(
 )
 hw.open()
 
-test_img_idx = 74
+test_img_idx = 0
 
-test_img_dir = "photos"
+test_img_dir = "archive"
 
 contents = os.listdir(test_img_dir)
 photos = []
@@ -290,8 +290,8 @@ while True:
     red_mask = cv.inRange(img_hsv, red_low, red_high)
     green_mask = cv.inRange(img_hsv, green_low, green_high)
     green_count = cv.countNonZero(green_mask)
-    # print(green_count / (rows * cols))
-    if green_count > 0.03:
+    # print()
+    if green_count / (rows * cols) > 0.03:
         should_stop = True
         stop_time = time.time()
     combined_raw_mask = cv.bitwise_or(
