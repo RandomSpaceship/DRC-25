@@ -5,7 +5,7 @@
 # - line: A connection between two nodes
 # - endpoint: A point on either end of a line which needs to be associated with a node
 import render_helpers
-
+import queue
 import time
 import os
 import config
@@ -69,7 +69,7 @@ def write_img():
         if img is False:
             break
         if not config.values["algorithm"]["use_photos"]:
-            cv.imwrite(f"archive/{datetime.now()}.jpg", img)
+            cv.imwrite(f"archive/{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.jpg", img)
 
 
 image_writer = threading.Thread(target=write_img)
@@ -735,7 +735,7 @@ while True:
         print(f"dt: {elapsed_time:.3f}s")
 
     write_counter += 1
-    if write_counter >= 3:
+    if write_counter >= 5:
         write_counter = 0
         q.put(img.copy())
 q.put(False)
