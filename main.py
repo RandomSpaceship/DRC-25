@@ -14,6 +14,9 @@ import math
 import numpy as np
 from enum import Enum
 import pathfinder
+import asyncio
+from datetime import datetime
+import threading
 
 # import hardware
 
@@ -55,6 +58,22 @@ def mouse_event(event, x, y, flags, param):
         min_hsv = np.array([255, 255, 255])
         max_hsv = np.array([0, 0, 0])
 
+
+q = queue.Queue()
+
+
+def write_img():
+    while True:
+        img = q.get()
+        print("w")
+        if img is False:
+            break
+        if not config.values["algorithm"]["use_photos"]:
+            cv.imwrite(f"archive/{datetime.now()}.jpg", img)
+
+
+image_writer = threading.Thread(target=write_img)
+image_writer.start()
 
 do_display = config.values["algorithm"]["display"]
 if do_display:
@@ -117,6 +136,7 @@ prev_turning_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_si
 prev_strafing_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_size"])
 target_coords = None
 
+write_counter = 0
 shown_image = ShownImage.RGB
 prev_path_tick = cv.getTickCount()
 prev_strafe = 0
@@ -524,7 +544,8 @@ while True:
             hw_turn *= scale
             hw_strafe *= scale
 
-        print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
+        if not config.values["algorithm"]["use_photos"]:
+            print(f"fwd: {hw_fwd:.2f}, turn: {hw_turn:.2f}, strafe: {hw_strafe:.2f}")
 
         hw.update(hw_fwd, hw_turn, hw_strafe)
 
@@ -709,5 +730,14 @@ while True:
         cv.imshow(window_title, disp)
     end_ticks = cv.getTickCount()
     elapsed_time = (end_ticks - start_ticks) / cv.getTickFrequency()
-    print(f"dt: {elapsed_time:.3f}s")
+
+    if not config.values["algorithm"]["use_photos"]:
+        print(f"dt: {elapsed_time:.3f}s")
+
+    write_counter += 1
+    if write_counter >= 3:
+        write_counter = 0
+        q.put(img.copy())
+q.put(False)
+image_writer.join()
 cv.destroyAllWindows()
