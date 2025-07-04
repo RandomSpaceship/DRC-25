@@ -65,7 +65,7 @@ q = queue.Queue()
 def write_img():
     while True:
         img = q.get()
-        print("w")
+        # print("w")
         if img is False:
             break
         if not config.values["algorithm"]["use_photos"]:
