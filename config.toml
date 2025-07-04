@@ -39,7 +39,7 @@ second_pass_threshold = 0.4
 image_edge_distance = 2
 
 [algorithm.navigation]
-default_target_x = 0.5
+default_target_x = 0.45
 default_target_y = 0.5
 history_weighting = 0.3
 color_loss_offset = 0
@@ -76,12 +76,12 @@ max = 650
 min = 50
 
 [hardware.control.steering]
-max = 450
+max = 500
 min = 50
 
 
 [hardware.control.strafing]
-max = 4500
+max = 5700
 min = 50
 
 [display]
