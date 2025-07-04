@@ -61,7 +61,7 @@ max_sum = 1000
 
 [hardware.pid.steering]
 Kp = 3.0
-Kd = 0.5
+Kd = 2
 Ki = 0
 
 [hardware.pid.strafing]
@@ -70,16 +70,16 @@ Kd = 0
 Ki = 0
 
 [hardware.control.speeds]
-max = 350
+max = 500
 min = 50
 
 [hardware.control.steering]
-max = 300
+max = 500
 min = 50
 
 
 [hardware.control.strafing]
-max = 2500
+max = 3550
 min = 50
 
 [display]
