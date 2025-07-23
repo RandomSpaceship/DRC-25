@@ -108,27 +108,6 @@ draw_junctions = False
 draw_terminations = False
 
 
-class ShownImage(Enum):
-    TESTING_1 = 0
-    TESTING_2 = 1
-    TESTING_3 = 2
-    TESTING_4 = 3
-    RGB = 20
-    HSV = 21
-    YELLOW = 30
-    BLUE = 31
-    COMBINED_RAW = 32
-    COMBINED = 33
-    MAGENTA = 34
-    RED = 35
-    VORONOI = 40
-    LAPLACIAN = 41
-    PATH_MASK = 42
-    SKELETON = 43
-    JUNCTIONS = 44
-    TERMINATIONS = 45
-
-
 cap = None
 
 if not config.values["algorithm"]["use_photos"]:
@@ -161,10 +140,10 @@ prev_strafing_offsets = np.zeros(config.values["algorithm"]["navigation"]["avg_s
 target_coords = None
 
 write_counter = 0
-shown_image = ShownImage.RGB
 prev_path_tick = cv.getTickCount()
 prev_strafe = 0
 prev_turn = 0
+last_key = None
 while True:
     start_ticks = cv.getTickCount()
     key = None
@@ -172,64 +151,21 @@ while True:
         key = cv.waitKey(1)
         if key == ord("-"):
             break
-        if key == ord("["):
+        elif key == ord("["):
             draw_junctions = not draw_junctions
-        if key == ord("]"):
+        elif key == ord("]"):
             draw_terminations = not draw_terminations
-        if key == ord("1"):
-            shown_image = ShownImage.TESTING_1
-        if key == ord("2"):
-            shown_image = ShownImage.TESTING_2
-        if key == ord("3"):
-            shown_image = ShownImage.TESTING_3
-        if key == ord("4"):
-            shown_image = ShownImage.TESTING_4
-        if key == ord("5"):
-            shown_image = ShownImage.TERMINATIONS
-        if key == ord("6"):
-            shown_image = ShownImage.FILTERED_TERMINATIONS
-        if key == ord("7"):
-            shown_image = ShownImage.BLUR
-        if key == ord("8"):
-            shown_image = ShownImage.SKELETON_MINUS_JUNCTIONS
-
-        if key == ord("a"):
-            shown_image = ShownImage.RGB
-        if key == ord("s"):
-            shown_image = ShownImage.HSV
-        if key == ord("d"):
-            shown_image = ShownImage.YELLOW
-        if key == ord("f"):
-            shown_image = ShownImage.BLUE
-        if key == ord("g"):
-            shown_image = ShownImage.COMBINED_RAW
-        if key == ord("h"):
-            shown_image = ShownImage.COMBINED
-        if key == ord("j"):
-            shown_image = ShownImage.MAGENTA
-        if key == ord("k"):
-            shown_image = ShownImage.RED
-        if key == ord("z"):
-            shown_image = ShownImage.VORONOI
-        if key == ord("x"):
-            shown_image = ShownImage.LAPLACIAN
-        if key == ord("c"):
-            shown_image = ShownImage.PATH_MASK
-        if key == ord("v"):
-            shown_image = ShownImage.SKELETON
-        if key == ord("b"):
-            shown_image = ShownImage.JUNCTIONS
-        if key == ord("n"):
-            shown_image = ShownImage.TERMINATIONS
-        if key == ord(","):
+        elif key == ord(","):
             test_img_idx = (test_img_idx - 1) % len(photos)
-        if key == ord("."):
+        elif key == ord("."):
             test_img_idx = (test_img_idx + 1) % len(photos)
 
-        if key == ord("R"):
+        elif key == ord("R"):
             config.reload()
-        if key == ord("Q"):
+        elif key == ord("Q"):
             target_coords = None
+        elif key != -1:
+            last_key = key
 
     img = None
     if not config.values["algorithm"]["use_photos"]:
@@ -301,10 +237,6 @@ while True:
     yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
     yellow_count = cv.countNonZero(yellow_mask)
     magenta_mask = cv.inRange(img_hsv, magenta_low, magenta_high)
-    img_hsv_red = img_hsv.copy()
-    img_hsv_red[:, :, 0] = (
-        (img_hsv_red[:, :, 0].astype(np.uint16) + 128) % 256
-    ).astype(np.uint8)
     red_mask = cv.inRange(img_hsv, red_low, red_high)
     green_mask = cv.inRange(img_hsv, green_low, green_high)
     green_count = cv.countNonZero(green_mask)
@@ -655,59 +587,53 @@ while True:
 
     if do_display:
         disp = img.copy()
-        match shown_image:
-            case ShownImage.TESTING_1:
-                disp = cv.cvtColor(paths_with_distance, cv.COLOR_GRAY2BGR)
-            case ShownImage.TESTING_2:
-                disp = cv.cvtColor(second_pass_paths, cv.COLOR_GRAY2BGR)
-            case ShownImage.TESTING_3:
-                disp = img_hsv_red.copy()
-            case ShownImage.TESTING_4:
-                disp = cv.cvtColor(green_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.RGB:
-                disp = img.copy()
-            case ShownImage.HSV:
-                disp = img_hsv.copy()
-            case ShownImage.BLUE:
-                disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.YELLOW:
-                disp = cv.cvtColor(yellow_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.COMBINED_RAW:
-                disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.COMBINED:
-                disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.MAGENTA:
-                disp = cv.cvtColor(magenta_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.RED:
-                disp = cv.cvtColor(red_mask, cv.COLOR_GRAY2BGR)
-            case ShownImage.VORONOI:
-                normalised = cv.normalize(
-                    voronoi,
-                    None,
-                    0,
-                    255,
-                    cv.NORM_MINMAX,
-                    cv.CV_8UC1,
-                )
-                disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
-            case ShownImage.LAPLACIAN:
-                normalised = cv.normalize(
-                    laplacian,
-                    None,
-                    0,
-                    255,
-                    cv.NORM_MINMAX,
-                    cv.CV_8UC1,
-                )
-                disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
-            case ShownImage.PATH_MASK:
-                disp = cv.cvtColor(first_pass_paths, cv.COLOR_GRAY2BGR)
-            case ShownImage.SKELETON:
-                disp = cv.cvtColor(path_data["skeleton"], cv.COLOR_GRAY2BGR)
-            case ShownImage.JUNCTIONS:
-                disp = cv.cvtColor(path_data["junction_mask"], cv.COLOR_GRAY2BGR)
-            case ShownImage.TERMINATIONS:
-                disp = cv.cvtColor(path_data["termination_mask"], cv.COLOR_GRAY2BGR)
+
+        if last_key == ord("1"):
+            disp = cv.cvtColor(paths_with_distance, cv.COLOR_GRAY2BGR)
+        if last_key == ord("2"):
+            disp = cv.cvtColor(second_pass_paths, cv.COLOR_GRAY2BGR)
+        if last_key == ord("s"):
+            disp = img_hsv.copy()
+        if last_key == ord("d"):
+            disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("f"):
+            disp = cv.cvtColor(yellow_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("g"):
+            disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("h"):
+            disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("j"):
+            disp = cv.cvtColor(magenta_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("k"):
+            disp = cv.cvtColor(red_mask, cv.COLOR_GRAY2BGR)
+        if last_key == ord("z"):
+            normalised = cv.normalize(
+                voronoi,
+                None,
+                0,
+                255,
+                cv.NORM_MINMAX,
+                cv.CV_8UC1,
+            )
+            disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
+        if last_key == ord("x"):
+            normalised = cv.normalize(
+                laplacian,
+                None,
+                0,
+                255,
+                cv.NORM_MINMAX,
+                cv.CV_8UC1,
+            )
+            disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
+        if last_key == ord("c"):
+            disp = cv.cvtColor(first_pass_paths, cv.COLOR_GRAY2BGR)
+        if last_key == ord("v"):
+            disp = cv.cvtColor(path_data["skeleton"], cv.COLOR_GRAY2BGR)
+        if last_key == ord("b"):
+            disp = cv.cvtColor(path_data["junction_mask"], cv.COLOR_GRAY2BGR)
+        if last_key == ord("n"):
+            disp = cv.cvtColor(path_data["termination_mask"], cv.COLOR_GRAY2BGR)
 
         if draw_junctions:
             # draw the node tree
