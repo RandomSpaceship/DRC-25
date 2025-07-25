@@ -124,7 +124,7 @@ hw = hardware.MecanumHardwareAPI(
 )
 hw.open()
 
-test_img_idx = 0
+test_img_idx = 56
 
 test_img_dir = "archive"
 
@@ -276,13 +276,32 @@ while True:
         ((close_rad * 2) - 1, (close_rad * 2) - 1),
     )
     combined_mask = cv.morphologyEx(combined_mask, cv.MORPH_CLOSE, fillet_kernel)
+    # left side (yellow)
     combined_mask[rows - 1 - config.values["algorithm"]["sidebar_height"] :, 0:10] = 255
+    yellow_mask[rows - 1 - config.values["algorithm"]["sidebar_height"] :, 0:10] = 255
+    # right side (blue)
     combined_mask[
         rows - 1 - config.values["algorithm"]["sidebar_height"] :,
         cols - 1 - 10 : cols - 1,
     ] = 255
+    blue_mask[
+        rows - 1 - config.values["algorithm"]["sidebar_height"] :,
+        cols - 1 - 10 : cols - 1,
+    ] = 255
 
-    voronoi = cv.distanceTransform(cv.bitwise_not(combined_mask), cv.DIST_L2, 5)
+    voronoi, voronoi_labels = cv.distanceTransformWithLabels(
+        cv.bitwise_not(combined_mask), cv.DIST_L2, cv.DIST_MASK_PRECISE
+    )
+    voronoi_blue = cv.distanceTransform(
+        cv.bitwise_not(blue_mask), cv.DIST_L2, cv.DIST_MASK_PRECISE
+    )
+    voronoi_yellow = cv.distanceTransform(
+        cv.bitwise_not(yellow_mask), cv.DIST_L2, cv.DIST_MASK_PRECISE
+    )
+    voronoi_blue = cv.normalize(voronoi_blue, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1)
+    voronoi_yellow = cv.normalize(
+        voronoi_yellow, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1
+    )
 
     derivative_kernel_size = 21
 
@@ -586,12 +605,41 @@ while True:
         hw.update(hw_fwd, hw_turn, hw_strafe)
 
     if do_display:
+        diff = cv.subtract(voronoi_blue, voronoi_yellow, dtype=cv.CV_16S)
+        diff = cv.normalize(
+            diff,
+            None,
+            0,
+            255,
+            cv.NORM_MINMAX,
+            cv.CV_8UC1,
+        )
+        diff = cv.addWeighted(
+            diff,
+            config.values["algorithm"]["alpha1"],
+            voronoi,
+            config.values["algorithm"]["alpha2"],
+            0,
+        )
+        cpoint = 255 // 2
+        ideal = cv.inRange(
+            diff,
+            cpoint - config.values["algorithm"]["thresh"],
+            cpoint + config.values["algorithm"]["thresh"],
+        )
         disp = img.copy()
 
         if last_key == ord("1"):
             disp = cv.cvtColor(paths_with_distance, cv.COLOR_GRAY2BGR)
         if last_key == ord("2"):
             disp = cv.cvtColor(second_pass_paths, cv.COLOR_GRAY2BGR)
+        if last_key == ord("3"):
+            disp = cv.cvtColor(voronoi_blue, cv.COLOR_GRAY2BGR)
+        if last_key == ord("4"):
+            disp = cv.cvtColor(voronoi_yellow, cv.COLOR_GRAY2BGR)
+        if last_key == ord("5"):
+            disp = cv.cvtColor(diff, cv.COLOR_GRAY2BGR)
+
         if last_key == ord("s"):
             disp = img_hsv.copy()
         if last_key == ord("d"):
@@ -634,6 +682,7 @@ while True:
             disp = cv.cvtColor(path_data["junction_mask"], cv.COLOR_GRAY2BGR)
         if last_key == ord("n"):
             disp = cv.cvtColor(path_data["termination_mask"], cv.COLOR_GRAY2BGR)
+        disp[ideal > 0, 1] += 40
 
         if draw_junctions:
             # draw the node tree

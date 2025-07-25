@@ -7,6 +7,10 @@ color_loss_threshold = 0.0015
 display = false
 use_photos = false
 
+thresh = 7
+alpha1 = 0.999
+alpha2 = 0.00
+
 [algorithm.thresholds.colors]
 blue = [103, 108, 199]
 yellow = [27, 60, 193]
