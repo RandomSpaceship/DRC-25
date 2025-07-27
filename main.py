@@ -169,7 +169,7 @@ while True:
     start_ticks = cv.getTickCount()
     key = None
     if do_display:
-        key = cv.waitKey(1)
+        key = cv.waitKey(100)
         if key == ord("-"):
             break
         if key == ord("["):
