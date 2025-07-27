@@ -72,7 +72,7 @@ def write_img():
         # print("w")
         if img is False:
             break
-        if not config.values["algorithm"]["use_photos"]:
+        if not config.values["algorithm"]["use_photos"] and config.values["algorithm"]["save_photos"]:
             cv.imwrite(
                 f"archive/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.jpg", img
             )
@@ -248,6 +248,10 @@ while True:
     mouse_img_x = min(max(mouse_x, 0), cols - 1)
     mouse_img_y = min(max(mouse_y, 0), rows - 1)
     # print(f"HSV: {img_hsv[mouse_img_y, mouse_img_x]}")
+    if not should_start:
+        time.sleep(0.1)
+        continue
+
 
     blue_threshold = np.array(
         config.values["algorithm"]["thresholds"]["colors"]["blue"]
@@ -310,7 +314,7 @@ while True:
     green_count = cv.countNonZero(green_mask)
     # print()
     if green_count / (rows * cols) > 0.03:
-        should_stop = True
+        # should_stop = True
         stop_time = time.time()
     combined_raw_mask = cv.bitwise_or(
         magenta_mask, cv.bitwise_or(blue_mask, yellow_mask)

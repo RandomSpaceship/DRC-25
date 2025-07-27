@@ -6,6 +6,7 @@ blackbar_height = 0
 color_loss_threshold = 0.0015
 display = false
 use_photos = false
+save_photos = true
 
 [algorithm.thresholds.colors]
 blue = [103, 108, 199]
@@ -41,10 +42,10 @@ image_edge_distance = 2
 [algorithm.navigation]
 default_target_x = 0.45
 default_target_y = 0.5
-history_weighting = 0.3
+history_weighting = 0.35
 color_loss_offset = 0
 avg_size = 2
-ratio_biasing = 200
+ratio_biasing = 130
 
 
 [hardware]
@@ -63,7 +64,7 @@ max_sum = 1000
 
 [hardware.pid.steering]
 Kp = 3.0
-Kd = 2
+Kd = 1
 Ki = 0
 
 [hardware.pid.strafing]
@@ -72,16 +73,16 @@ Kd = 0
 Ki = 0
 
 [hardware.control.speeds]
-max = 650
+max = 200
 min = 50
 
 [hardware.control.steering]
-max = 500
+max = 190
 min = 50
 
 
 [hardware.control.strafing]
-max = 5700
+max = 2400
 min = 50
 
 [display]
