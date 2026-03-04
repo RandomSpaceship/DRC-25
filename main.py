@@ -93,6 +93,48 @@ def do_input():
             should_stop = False
 
 
+def filter_coloredness(img_hsv, color):
+    col_ideal = np.array(config.values["colors"][color]["ideal"])
+    col_range = np.array(config.values["colors"][color]["range"])
+
+    diff = cv.absdiff(img_hsv, col_ideal)
+    capped_diff = (cv.max(diff, col_range / 2) - col_range / 2).astype(np.float32)
+
+    h_weight = config.values["colors"]["hue_weight"]
+    s_weight = config.values["colors"]["sat_weight"]
+    v_weight = config.values["colors"]["val_weight"]
+
+    if "hue_weight" in config.values["colors"][color]:
+        h_weight = config.values["colors"][color]["hue_weight"]
+    if "sat_weight" in config.values["colors"][color]:
+        s_weight = config.values["colors"][color]["sat_weight"]
+    if "val_weight" in config.values["colors"][color]:
+        v_weight = config.values["colors"][color]["val_weight"]
+
+    hue_diff = capped_diff[:, :, 0]
+    sat_diff = capped_diff[:, :, 1]
+    val_diff = capped_diff[:, :, 2]
+    total_diff = (
+        (hue_diff * h_weight + sat_diff * s_weight + val_diff * v_weight)
+        / (h_weight + s_weight + v_weight)
+    ).astype(np.uint8)
+    mask = (total_diff < config.values["colors"][color]["threshold"]).astype(
+        np.uint8
+    ) * 255
+    return (mask, total_diff, capped_diff.astype(np.uint8))
+
+
+def filter_color_thresholds(img_hsv, color):
+    col_ideal = np.array(config.values["colors"][color]["ideal"])
+    col_range = np.array(config.values["colors"][color]["range"])
+
+    col_low = col_ideal - (col_range / 2)
+    col_high = col_ideal + (col_range / 2)
+
+    col_mask = cv.inRange(img_hsv, col_low, col_high)
+    return col_mask
+
+
 image_writer = threading.Thread(target=write_img)
 image_writer.start()
 input_th = threading.Thread(target=do_input)
@@ -144,6 +186,9 @@ prev_path_tick = cv.getTickCount()
 prev_strafe = 0
 prev_turn = 0
 last_key = None
+
+debug_col = "yellow"
+
 while True:
     start_ticks = cv.getTickCount()
     key = None
@@ -159,6 +204,17 @@ while True:
             test_img_idx = (test_img_idx - 1) % len(photos)
         elif key == ord("."):
             test_img_idx = (test_img_idx + 1) % len(photos)
+
+        elif key == ord("A"):
+            debug_col = "yellow"
+        elif key == ord("S"):
+            debug_col = "blue"
+        elif key == ord("D"):
+            debug_col = "magenta"
+        elif key == ord("F"):
+            debug_col = "red"
+        elif key == ord("G"):
+            debug_col = "green"
 
         elif key == ord("R"):
             config.reload()
@@ -185,60 +241,42 @@ while True:
     mouse_img_y = min(max(mouse_y, 0), rows - 1)
     # print(f"HSV: {img_hsv[mouse_img_y, mouse_img_x]}")
 
-    blue_threshold = np.array(
-        config.values["algorithm"]["thresholds"]["colors"]["blue"]
+    (yellow_mask, total_yellow_diff, capped_yellow_diff) = filter_coloredness(
+        img_hsv, "yellow"
     )
-    yellow_threshold = np.array(
-        config.values["algorithm"]["thresholds"]["colors"]["yellow"]
-    )
-    magenta_threshold = np.array(
-        config.values["algorithm"]["thresholds"]["colors"]["magenta"]
-    )
-    red_threshold = np.array(config.values["algorithm"]["thresholds"]["colors"]["red"])
-    green_threshold = np.array(
-        config.values["algorithm"]["thresholds"]["colors"]["green"]
-    )
-    blue_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["blue"])
-    yellow_range = np.array(
-        config.values["algorithm"]["thresholds"]["ranges"]["yellow"]
-    )
-    magenta_range = np.array(
-        config.values["algorithm"]["thresholds"]["ranges"]["magenta"]
-    )
-    red_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["red"])
-    green_range = np.array(config.values["algorithm"]["thresholds"]["ranges"]["green"])
+    (blue_mask, total_blue_diff, capped_blue_diff) = filter_coloredness(img_hsv, "blue")
 
-    blue_low = blue_threshold - (blue_range / 2)
-    blue_high = blue_threshold + (blue_range / 2)
-    yellow_low = yellow_threshold - (yellow_range / 2)
-    yellow_high = yellow_threshold + (yellow_range / 2)
-    magenta_low = magenta_threshold - (magenta_range / 2)
-    magenta_high = magenta_threshold + (magenta_range / 2)
-    red_low = red_threshold - (red_range / 2)
-    red_high = red_threshold + (red_range / 2)
-    green_low = green_threshold - (green_range / 2)
-    green_high = green_threshold + (green_range / 2)
-
-    if "blue" in config.values["algorithm"]["thresholds"]["min"]:
-        blue_min = np.array(config.values["algorithm"]["thresholds"]["min"]["blue"])
-        blue_low = np.maximum(blue_low, blue_min)
-    if "blue" in config.values["algorithm"]["thresholds"]["max"]:
-        blue_max = np.array(config.values["algorithm"]["thresholds"]["max"]["blue"])
-        blue_high = np.minimum(blue_high, blue_max)
-    if "yellow" in config.values["algorithm"]["thresholds"]["min"]:
-        yellow_min = np.array(config.values["algorithm"]["thresholds"]["min"]["yellow"])
-        yellow_low = np.maximum(yellow_low, yellow_min)
-    if "yellow" in config.values["algorithm"]["thresholds"]["max"]:
-        yellow_max = np.array(config.values["algorithm"]["thresholds"]["max"]["yellow"])
-        yellow_high = np.minimum(yellow_high, yellow_max)
-
-    blue_mask = cv.inRange(img_hsv, blue_low, blue_high)
+    # img_yellowness = cv.normalize(
+    #     img_yellowness, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1
+    # )
+    # derivative_kernel_size = colour_config.values["algorithm"]["kern_s"]
+    # i_y_laplace = cv.normalize(
+    #     cv.Laplacian(img_yellowness, cv.CV_32F, 0, ksize=derivative_kernel_size),
+    #     None,
+    #     0,
+    #     255,
+    #     cv.NORM_MINMAX,
+    #     cv.CV_8UC1,
+    # )
+    # img_yellowness = cv.normalize(
+    #     img_yellowness, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1
+    # )
+    derivative_kernel_size = config.values["algorithm"]["kern_s"]
+    # i_y_laplace = cv.normalize(
+    #     cv.Laplacian(img_yellowness, cv.CV_32F, 0, ksize=derivative_kernel_size),
+    #     None,
+    #     0,
+    #     255,
+    #     cv.NORM_MINMAX,
+    #     cv.CV_8UC1,
+    # )
+    # blue_mask = cv.inRange(img_hsv, blue_low, blue_high)
     blue_count = cv.countNonZero(blue_mask)
-    yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
+    # yellow_mask = cv.inRange(img_hsv, yellow_low, yellow_high)
     yellow_count = cv.countNonZero(yellow_mask)
-    magenta_mask = cv.inRange(img_hsv, magenta_low, magenta_high)
-    red_mask = cv.inRange(img_hsv, red_low, red_high)
-    green_mask = cv.inRange(img_hsv, green_low, green_high)
+    magenta_mask = filter_color_thresholds(img_hsv, "magenta")
+    red_mask = filter_color_thresholds(img_hsv, "red")
+    green_mask = filter_color_thresholds(img_hsv, "green")
     green_count = cv.countNonZero(green_mask)
     # print()
     if green_count / (rows * cols) > 0.03:
@@ -247,6 +285,25 @@ while True:
     combined_raw_mask = cv.bitwise_or(
         magenta_mask, cv.bitwise_or(blue_mask, yellow_mask)
     )
+
+    debug_mask = None
+    debug_color_diff = capped_yellow_diff
+    debug_color_total_diff = total_yellow_diff
+    match debug_col:
+        case "yellow":
+            debug_mask = yellow_mask
+            debug_color_diff = capped_yellow_diff
+            debug_color_total_diff = total_yellow_diff
+        case "blue":
+            debug_mask = blue_mask
+            debug_color_diff = capped_blue_diff
+            debug_color_total_diff = total_blue_diff
+        case "magenta":
+            debug_mask = magenta_mask
+        case "red":
+            debug_mask = red_mask
+        case "green":
+            debug_mask = green_mask
 
     total_border_count = blue_count + yellow_count
     border_ratio = 0
@@ -303,20 +360,9 @@ while True:
         voronoi_yellow, None, 0, 255, cv.NORM_MINMAX, cv.CV_8UC1
     )
 
-    derivative_kernel_size = 21
-
     horizontal_sobel = cv.Sobel(voronoi, cv.CV_32F, 2, 0, ksize=derivative_kernel_size)
     vertical_sobel = cv.Sobel(voronoi, cv.CV_32F, 0, 2, ksize=derivative_kernel_size)
-    # zero out bottom rows of sobel derivative
-    # vertical_sobel[rows - 10 - 1 : rows, :] //= 3
-    # laplacian = 255 - cv.normalize(
-    #     cv.Laplacian(voronoi, cv.CV_32F, ksize=derivative_kernel_size),
-    #     None,
-    #     0,
-    #     255,
-    #     cv.NORM_MINMAX,
-    #     cv.CV_8UC1,
-    # )
+
     laplacian = 255 - cv.normalize(
         cv.add(horizontal_sobel, vertical_sobel),
         None,
@@ -643,27 +689,19 @@ while True:
         if last_key == ord("s"):
             disp = img_hsv.copy()
         if last_key == ord("d"):
-            disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(debug_color_total_diff, cv.COLOR_GRAY2BGR)
         if last_key == ord("f"):
-            disp = cv.cvtColor(yellow_mask, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(debug_color_diff[:, :, 0], cv.COLOR_GRAY2BGR)
         if last_key == ord("g"):
-            disp = cv.cvtColor(combined_raw_mask, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(debug_color_diff[:, :, 1], cv.COLOR_GRAY2BGR)
         if last_key == ord("h"):
-            disp = cv.cvtColor(combined_mask, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(debug_color_diff[:, :, 2], cv.COLOR_GRAY2BGR)
         if last_key == ord("j"):
-            disp = cv.cvtColor(magenta_mask, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(debug_mask, cv.COLOR_GRAY2BGR)
         if last_key == ord("k"):
-            disp = cv.cvtColor(red_mask, cv.COLOR_GRAY2BGR)
-        if last_key == ord("z"):
-            normalised = cv.normalize(
-                voronoi,
-                None,
-                0,
-                255,
-                cv.NORM_MINMAX,
-                cv.CV_8UC1,
-            )
-            disp = cv.cvtColor(normalised, cv.COLOR_GRAY2BGR)
+            disp = cv.cvtColor(blue_mask, cv.COLOR_GRAY2BGR)
+        # if last_key == ord("z"):
+        #     disp = cv.cvtColor(i_y_laplace, cv.COLOR_GRAY2BGR)
         if last_key == ord("x"):
             normalised = cv.normalize(
                 laplacian,
